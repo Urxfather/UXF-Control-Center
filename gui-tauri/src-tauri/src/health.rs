@@ -384,7 +384,7 @@ pub fn detect_installed_version() -> String {
     {
         if out.status.success() {
             let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !s.is_empty() && !s.contains("not installed") {
+            if !s.is_empty() && !s.contains("not installed") && !s.contains("error") {
                 return s;
             }
         }
@@ -397,7 +397,7 @@ pub fn detect_installed_version() -> String {
     {
         if out.status.success() {
             let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !s.is_empty() && !s.contains("not installed") {
+            if !s.is_empty() && !s.contains("not installed") && !s.contains("error") {
                 return s;
             }
         }
@@ -405,7 +405,7 @@ pub fn detect_installed_version() -> String {
 
     // 3. Fallback to compile-time package version
     option_env!("UXF_PKG_FULL_VERSION")
-        .unwrap_or("2.0.2-2")
+        .unwrap_or("2.0.2-3")
         .to_string()
 }
 
@@ -421,6 +421,13 @@ pub fn check_app_update(current_version: &str) -> UpdateCheckResult {
     // Ensure we use the actual installed version if an uninitialized or dummy version is passed
     let effective_version = if current_version.trim().is_empty() || current_version.trim() == "1.0.0" {
         detect_installed_version()
+    } else if !current_version.contains('-') {
+        let detected = detect_installed_version();
+        if detected.starts_with(current_version.trim()) && detected.contains('-') {
+            detected
+        } else {
+            current_version.trim().to_string()
+        }
     } else {
         current_version.trim().to_string()
     };

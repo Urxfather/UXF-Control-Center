@@ -3,7 +3,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
 [![Platform: Fedora Linux](https://img.shields.io/badge/Platform-Fedora%2045-blue.svg)](https://fedoraproject.org/)
 [![Architecture: x86_64](https://img.shields.io/badge/Arch-x86__64-brightgreen.svg)]()
-[![Release: v2.0.2-2](https://img.shields.io/badge/Release-v2.0.2--2-orange.svg)](https://github.com/Urxfather/UXF-Control-Center/releases)
+[![Release: v2.0.2-3](https://img.shields.io/badge/Release-v2.0.2--3-orange.svg)](https://github.com/Urxfather/UXF-Control-Center/releases)
 
 **UXF-Control-Center** is an independently maintained, modern Linux control center and DKMS hardware driver suite built specifically for supported Acer gaming laptops. 
 
@@ -48,19 +48,18 @@ UXF-Control-Center safely checks DMI identifiers on startup. If an unverified or
 
 ---
 
-
 ## Installation (Fedora 45 / x86_64)
 
 UXF-Control-Center is packaged as a production-grade RPM package that handles dependency resolution, DKMS driver compilation, udev permissions, and systemd service startup automatically.
 
 ### 1. Download the Latest RPM
-Download `uxf-control-center-2.0.2-2.x86_64.rpm` from [GitHub Releases](https://github.com/Urxfather/UXF-Control-Center/releases).
+Download `uxf-control-center-2.0.2-3.x86_64.rpm` from [GitHub Releases](https://github.com/Urxfather/UXF-Control-Center/releases).
 
 ### 2. Install via DNF
 Open a terminal in the folder where the RPM was downloaded and run:
 
 ```bash
-sudo dnf install ./uxf-control-center-2.0.2-2.x86_64.rpm
+sudo dnf install ./uxf-control-center-2.0.2-3.x86_64.rpm
 ```
 
 DNF will automatically resolve and install external dependencies (`dkms`, `kernel-devel-matched`, `libwebkit2gtk-4.1`, etc.), compile the kernel module for your running kernel, configure device permissions, and start the system daemon.
@@ -74,34 +73,42 @@ uxf-control-center
 
 ---
 
-## Secure Boot & MOK Enrollment
+## Architecture
 
-If Secure Boot is enabled in your UEFI firmware, kernel module signature verification is required:
-
-1. During installation, DKMS automatically signs the compiled module using a local Machine Owner Key (`/var/lib/dkms/mok.pub`).
-2. If your system requires key enrollment, run:
-   ```bash
-   sudo mokutil --import /var/lib/dkms/mok.pub
-   ```
-3. Enter a temporary one-time password, reboot your laptop, and select **"Enroll MOK"** in the blue UEFI MokManager screen.
-4. Enter your temporary password and confirm enrollment.
+```
+┌─────────────────────────────────────────────────────────────┐
+│             UXF-Control-Center GUI (Tauri v2 + React 19)   │
+│             (/usr/bin/uxf-control-center)                   │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ D-Bus System Bus
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│             acer-control-daemon (Rust System Daemon)        │
+│             Endpoint: io.github.stanlysilas.AcerControl     │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+            ┌──────────────────┴──────────────────┐
+            ▼                                     ▼
+┌──────────────────────────────┐    ┌─────────────────────────┐
+│     acer_acpi / acer_wmi     │    │   acer_keyboard (DKMS)  │
+│  (ACPI EC / Thermal IOCTLs)  │    │   (RGB Lighting Kernel) │
+└──────────────────────────────┘    └─────────────────────────┘
+```
 
 ---
 
 ## Building from Source
 
-### Prerequisites
-On Fedora Linux, install the required build tools and libraries:
-
+### Prerequisites (Fedora)
 ```bash
-sudo dnf install -y \
-    gcc gcc-c++ make cmake meson ninja-build cargo rust nodejs npm \
-    webkit2gtk4.1-devel gtk3-devel libsoup3-devel openssl-devel \
-    dbus-devel libX11-devel libxkbcommon-devel wayland-devel mesa-libGL-devel \
-    dkms kernel-devel-matched
+sudo dnf install \
+    gcc gcc-c++ make cmake meson ninja-build \
+    kernel-devel-matched dkms \
+    rust cargo nodejs npm \
+    webkit2gtk4.1-devel openssl-devel libappindicator-gtk3-devel
 ```
 
-### Build Instructions
+### Build Steps
 
 1. **Clone the Repository:**
    ```bash
@@ -109,18 +116,18 @@ sudo dnf install -y \
    cd UXF-Control-Center
    ```
 
-2. **Build C Core Library (`libacercontrol`):**
+2. **Build C Driver & Library (`libacercontrol`):**
    ```bash
    meson setup build/meson lib --prefix=/usr --libdir=lib64 --buildtype=release
    meson compile -C build/meson
    ```
 
-3. **Build the Hardware Daemon:**
+3. **Build the System Daemon (`acer-control-daemon`):**
    ```bash
    cargo build --release --manifest-path daemon/Cargo.toml
    ```
 
-4. **Build the Tauri v2 GUI:**
+4. **Build the Modern GUI (`gui-tauri`):**
    ```bash
    cd gui-tauri
    npm install
@@ -133,7 +140,7 @@ sudo dnf install -y \
    ```bash
    LIBDIR=/usr/lib64 packaging/build-package.sh rpm
    ```
-   The built RPM package will be located in `dist/uxf-control-center-2.0.2-2.x86_64.rpm`.
+   The built RPM package will be located in `dist/uxf-control-center-2.0.2-3.x86_64.rpm`.
 
 ---
 

@@ -30,6 +30,9 @@ command -v cargo >/dev/null
 command -v nfpm >/dev/null
 command -v npm >/dev/null
 
+echo "=== Validating Version Parity Across Components ==="
+bash "$ROOT_DIR/scripts/validate-versions.sh"
+
 rm -rf "$STAGE" "$BUILD_ROOT/meson"
 mkdir -p "$STAGE" "$BUILD_ROOT" "$ROOT_DIR/dist"
 
@@ -53,7 +56,7 @@ cargo build --release --manifest-path "$ROOT_DIR/gui/Cargo.toml"
 echo "=== Building UXF-Control-Center Tauri GUI (Vite + Cargo release) ==="
 cd "$ROOT_DIR/gui-tauri"
 npm run build
-UXF_PKG_FULL_VERSION="${VERSION:-2.0.2}-2" cargo build --release --manifest-path "$ROOT_DIR/gui-tauri/src-tauri/Cargo.toml"
+UXF_PKG_FULL_VERSION="${VERSION:-2.0.2}-3" cargo build --release --manifest-path "$ROOT_DIR/gui-tauri/src-tauri/Cargo.toml"
 cd "$ROOT_DIR"
 
 echo "=== Staging binaries and files ==="

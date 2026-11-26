@@ -21,8 +21,8 @@ export function App() {
     useState<NavSectionId>(DEFAULT_SECTION);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
-  // Default to RPM release version 2.0.2-2
-  const [appVersion, setAppVersion] = useState("2.0.2-2");
+  // Default to RPM release version 2.0.2-3
+  const [appVersion, setAppVersion] = useState("2.0.2-3");
 
   const { updateInfo, showPopup, dismissPopup } = useUpdateChecker(appVersion);
 
@@ -33,13 +33,13 @@ export function App() {
     const initWindowState = async () => {
       try {
         const version = await invoke<string>("get_app_version");
-        if (active && version) {
+        if (active && version && version !== "1.0.0") {
           setAppVersion(version);
         }
       } catch (err) {
         try {
           const tauriVer = await getVersion();
-          if (active && tauriVer) {
+          if (active && tauriVer && tauriVer !== "1.0.0") {
             setAppVersion(tauriVer);
           }
         } catch {

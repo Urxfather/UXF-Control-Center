@@ -2,7 +2,7 @@ name: uxf-control-center
 arch: amd64
 platform: linux
 version: ${VERSION}
-release: "2"
+release: "3"
 section: utils
 priority: optional
 maintainer: Urxfather <170594861+Urxfather@users.noreply.github.com>

@@ -38,51 +38,69 @@ mod tests {
 
     #[test]
     fn test_required_version_comparison_cases() {
-        // 1. Installed 2.0.2-2, latest 2.0.2-2 → No update
+        // 1. Installed 2.0.2-3, latest 2.0.2-3 → No update
+        assert!(
+            !is_semver_greater("2.0.2-3", "2.0.2-3"),
+            "Identical version and release must NOT trigger an update"
+        );
+
+        // 2. Installed 2.0.2-2, latest 2.0.2-3 → Update available
+        assert!(
+            is_semver_greater("2.0.2-2", "2.0.2-3"),
+            "Release 3 is newer than release 2"
+        );
+
+        // 3. Installed 2.0.2-3, latest 2.0.2-2 → No update
+        assert!(
+            !is_semver_greater("2.0.2-3", "2.0.2-2"),
+            "Release 2 is older than release 3"
+        );
+
+        // 4. Installed 2.0.2-3, latest 2.0.3-1 → Update available
+        assert!(
+            is_semver_greater("2.0.2-3", "2.0.3-1"),
+            "Higher patch version must trigger an update"
+        );
+
+        // 5. Installed 2.0.2-3.fc45, latest 2.0.2-3 → No update
+        assert!(
+            !is_semver_greater("2.0.2-3.fc45", "2.0.2-3"),
+            "Distribution suffix must not prevent equality detection"
+        );
+
+        // 6. Installed 2.0.2-2, latest 2.0.2-2 → No update
         assert!(
             !is_semver_greater("2.0.2-2", "2.0.2-2"),
             "Identical version and release must NOT trigger an update"
         );
 
-        // 2. Installed 2.0.2-1, latest 2.0.2-2 → Update available
+        // 7. Installed 2.0.2-1, latest 2.0.2-2 → Update available
         assert!(
             is_semver_greater("2.0.2-1", "2.0.2-2"),
             "Higher RPM release must trigger an update"
         );
 
-        // 3. Installed 2.0.2-2, latest 2.0.3-1 → Update available
-        assert!(
-            is_semver_greater("2.0.2-2", "2.0.3-1"),
-            "Higher patch version must trigger an update"
-        );
-
-        // 4. Installed 2.0.2-2, latest 2.0.2-1 → No update
+        // 8. Installed 2.0.2-2, latest 2.0.2-1 → No update
         assert!(
             !is_semver_greater("2.0.2-2", "2.0.2-1"),
             "Lower release must NOT trigger an update"
         );
 
-        // 5. Installed 2.0.2-2, latest 2.0.2 → No update
+        // 9. Installed 2.0.2-2, latest 2.0.2 → No update
         assert!(
             !is_semver_greater("2.0.2-2", "2.0.2"),
             "Release 2 must be considered newer or equal to unspecified release"
         );
 
-        // 6. Installed 2.0.2, latest 2.0.2-2 → Update available
+        // 10. Installed 2.0.2, latest 2.0.2-3 → Update available
         assert!(
-            is_semver_greater("2.0.2", "2.0.2-2"),
-            "Release 2 is newer than unversioned release 1"
+            is_semver_greater("2.0.2", "2.0.2-3"),
+            "Release 3 is newer than unversioned release 1"
         );
 
-        // 7. Installed 2.0.2-2.fc45, latest 2.0.2-2 → No update
+        // 11. Installed 1.0.0, latest 2.0.2-3 → Update available
         assert!(
-            !is_semver_greater("2.0.2-2.fc45", "2.0.2-2"),
-            "Distribution suffix must not prevent equality detection"
-        );
-
-        // 8. Installed 1.0.0, latest 2.0.2-2 → Update available
-        assert!(
-            is_semver_greater("1.0.0", "2.0.2-2"),
+            is_semver_greater("1.0.0", "2.0.2-3"),
             "Upgrading from 1.0.0 must trigger an update"
         );
 
@@ -94,6 +112,20 @@ mod tests {
         assert!(!is_semver_greater("2.0.2", "2.0.2"));
         assert!(!is_semver_greater("2.0.3", "2.0.2"));
         assert!(!is_semver_greater("2.1.0", "2.0.9"));
+    }
+
+    #[test]
+    fn test_dummy_1_0_0_replaced_with_installed() {
+        let result = check_app_update("1.0.0");
+        assert_ne!(
+            result.current_version, "1.0.0",
+            "check_app_update must never report 1.0.0 as current version"
+        );
+        assert!(
+            result.current_version.contains("2.0.2"),
+            "Resolved current_version must contain 2.0.2, got: {}",
+            result.current_version
+        );
     }
 
     #[test]
