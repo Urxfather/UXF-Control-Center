@@ -1,6 +1,6 @@
 [package]
 name = "uxf-control-center-tauri"
-version = "1.0.0"
+version = "2.0.2"
 description = "Modern Tauri + React control center for Acer gaming laptops on Linux"
 authors = ["Urxfather / UXF⚡"]
 edition = "2024"

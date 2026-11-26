@@ -324,30 +324,107 @@ pub fn check_system_health() -> SystemHealthReport {
     }
 }
 
-/// Compares two semver strings (e.g. "2.0.2" vs "2.0.3").
-/// Returns true if remote is strictly greater than local.
-pub fn is_semver_greater(local: &str, remote: &str) -> bool {
-    let parse_nums = |s: &str| -> Vec<u32> {
-        s.trim_start_matches('v')
-            .split(['.', '-'])
-            .filter_map(|part| part.parse::<u32>().ok())
-            .collect()
-    };
+/// Represents a structured parsed version, supporting RPM-style release numbers
+/// (e.g., "2.0.2-2", "2.0.2-1", "v2.0.3-1", "2.0.2-2.fc45").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedVersion {
+    pub numbers: Vec<u32>,
+    pub release: Option<u32>,
+}
 
-    let local_parts = parse_nums(local);
-    let remote_parts = parse_nums(remote);
+impl ParsedVersion {
+    pub fn parse(s: &str) -> Self {
+        let trimmed = s.trim().trim_start_matches(|c| c == 'v' || c == 'V');
+        let parts: Vec<&str> = trimmed.splitn(2, '-').collect();
+        let ver_part = parts[0];
+        let rel_part = parts.get(1);
 
-    for (l, r) in local_parts.iter().zip(remote_parts.iter()) {
-        if r > l {
-            return true;
-        } else if r < l {
-            return false;
+        let numbers: Vec<u32> = ver_part
+            .split('.')
+            .filter_map(|p| p.parse::<u32>().ok())
+            .collect();
+
+        let release = rel_part.and_then(|r| {
+            let digits: String = r.chars().take_while(|c| c.is_ascii_digit()).collect();
+            digits.parse::<u32>().ok()
+        });
+
+        Self { numbers, release }
+    }
+
+    /// Returns true if `remote` is strictly newer than `self` (local).
+    pub fn is_remote_newer(&self, remote: &Self) -> bool {
+        let max_len = self.numbers.len().max(remote.numbers.len());
+        for i in 0..max_len {
+            let l = self.numbers.get(i).copied().unwrap_or(0);
+            let r = remote.numbers.get(i).copied().unwrap_or(0);
+            if r > l {
+                return true;
+            } else if r < l {
+                return false;
+            }
+        }
+
+        // Version numbers are equal; compare RPM package release numbers
+        // An unspecified release defaults to 1 (standard RPM packaging convention)
+        let l_rel = self.release.unwrap_or(1);
+        let r_rel = remote.release.unwrap_or(1);
+        r_rel > l_rel
+    }
+}
+
+/// Dynamically queries the installed package version.
+/// Queries RPM database for `uxf-control-center` and `acer-control-center`.
+/// Falls back to compile-time configuration if not running from an RPM.
+pub fn detect_installed_version() -> String {
+    // 1. Query RPM database for uxf-control-center
+    if let Ok(out) = Command::new("rpm")
+        .args(["-q", "--qf", "%{VERSION}-%{RELEASE}", "uxf-control-center"])
+        .output()
+    {
+        if out.status.success() {
+            let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !s.is_empty() && !s.contains("not installed") {
+                return s;
+            }
         }
     }
-    remote_parts.len() > local_parts.len()
+
+    // 2. Query RPM database for legacy acer-control-center
+    if let Ok(out) = Command::new("rpm")
+        .args(["-q", "--qf", "%{VERSION}-%{RELEASE}", "acer-control-center"])
+        .output()
+    {
+        if out.status.success() {
+            let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !s.is_empty() && !s.contains("not installed") {
+                return s;
+            }
+        }
+    }
+
+    // 3. Fallback to compile-time package version
+    option_env!("UXF_PKG_FULL_VERSION")
+        .unwrap_or("2.0.2-2")
+        .to_string()
+}
+
+/// Compares two version strings (e.g. "2.0.2-1" vs "2.0.2-2").
+/// Returns true if remote is strictly greater than local.
+pub fn is_semver_greater(local: &str, remote: &str) -> bool {
+    let local_v = ParsedVersion::parse(local);
+    let remote_v = ParsedVersion::parse(remote);
+    local_v.is_remote_newer(&remote_v)
 }
 
 pub fn check_app_update(current_version: &str) -> UpdateCheckResult {
+    // Ensure we use the actual installed version if an uninitialized or dummy version is passed
+    let effective_version = if current_version.trim().is_empty() || current_version.trim() == "1.0.0" {
+        detect_installed_version()
+    } else {
+        current_version.trim().to_string()
+    };
+
     // Check if a DNF repo configured for uxf-control-center exists in /etc/yum.repos.d/
     let has_dnf_repo = Path::new("/etc/yum.repos.d")
         .read_dir()
@@ -386,7 +463,7 @@ pub fn check_app_update(current_version: &str) -> UpdateCheckResult {
 
                     if is_draft || is_prerelease {
                         return UpdateCheckResult {
-                            current_version: current_version.to_string(),
+                            current_version: effective_version,
                             latest_version: None,
                             update_available: false,
                             download_url: None,
@@ -399,25 +476,30 @@ pub fn check_app_update(current_version: &str) -> UpdateCheckResult {
 
                     if let Some(tag) = val.get("tag_name").and_then(|t| t.as_str()) {
                         let latest_ver = tag.trim_start_matches('v').to_string();
-                        let is_newer = is_semver_greater(current_version, &latest_ver);
+                        let is_newer = is_semver_greater(&effective_version, &latest_ver);
 
-                        let download_url = val
-                            .get("assets")
-                            .and_then(|a| a.as_array())
-                            .and_then(|arr| {
-                                arr.iter().find_map(|item| {
-                                    let name = item.get("name")?.as_str()?;
-                                    if name.ends_with(".rpm") && name.contains("x86_64") {
-                                        item.get("browser_download_url")?.as_str().map(|s| s.to_string())
-                                    } else {
-                                        None
-                                    }
+                        let download_url = if is_newer {
+                            val.get("assets")
+                                .and_then(|a| a.as_array())
+                                .and_then(|arr| {
+                                    arr.iter().find_map(|item| {
+                                        let name = item.get("name")?.as_str()?;
+                                        if name.ends_with(".rpm") && name.contains("x86_64") {
+                                            item.get("browser_download_url")?.as_str().map(|s| s.to_string())
+                                        } else {
+                                            None
+                                        }
+                                    })
                                 })
-                            });
+                        } else {
+                            None
+                        };
 
                         let body = val.get("body").and_then(|b| b.as_str()).map(|s| s.to_string());
 
-                        let update_cmd = if has_dnf_repo {
+                        let update_cmd = if !is_newer {
+                            default_update_command
+                        } else if has_dnf_repo {
                             "sudo dnf upgrade uxf-control-center".to_string()
                         } else if let Some(ref url) = download_url {
                             let filename = url.split('/').last().unwrap_or("uxf-control-center.rpm");
@@ -427,7 +509,7 @@ pub fn check_app_update(current_version: &str) -> UpdateCheckResult {
                         };
 
                         return UpdateCheckResult {
-                            current_version: current_version.to_string(),
+                            current_version: effective_version,
                             latest_version: Some(latest_ver),
                             update_available: is_newer,
                             download_url,
@@ -440,7 +522,7 @@ pub fn check_app_update(current_version: &str) -> UpdateCheckResult {
                 }
             }
             UpdateCheckResult {
-                current_version: current_version.to_string(),
+                current_version: effective_version,
                 latest_version: None,
                 update_available: false,
                 download_url: None,
@@ -451,7 +533,7 @@ pub fn check_app_update(current_version: &str) -> UpdateCheckResult {
             }
         }
         Ok(_) | Err(_) => UpdateCheckResult {
-            current_version: current_version.to_string(),
+            current_version: effective_version,
             latest_version: None,
             update_available: false,
             download_url: None,

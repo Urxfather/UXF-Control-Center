@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "UXF-Control-Center",
-  "version": "1.0.0",
+  "version": "2.0.2",
   "identifier": "io.github.uxf.controlcenter",
   "build": {
     "beforeDevCommand": "npm run dev",

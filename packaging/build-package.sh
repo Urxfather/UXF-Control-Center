@@ -53,7 +53,7 @@ cargo build --release --manifest-path "$ROOT_DIR/gui/Cargo.toml"
 echo "=== Building UXF-Control-Center Tauri GUI (Vite + Cargo release) ==="
 cd "$ROOT_DIR/gui-tauri"
 npm run build
-cargo build --release --manifest-path "$ROOT_DIR/gui-tauri/src-tauri/Cargo.toml"
+UXF_PKG_FULL_VERSION="${VERSION:-2.0.2}-2" cargo build --release --manifest-path "$ROOT_DIR/gui-tauri/src-tauri/Cargo.toml"
 cd "$ROOT_DIR"
 
 echo "=== Staging binaries and files ==="

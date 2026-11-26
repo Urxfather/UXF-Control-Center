@@ -1,7 +1,7 @@
 {
   "name": "uxf-control-center-ui",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.2",
   "type": "module",
   "description": "Modern Tauri + React control center for Acer gaming laptops on Linux",
   "author": "Urxfather / UXF⚡",

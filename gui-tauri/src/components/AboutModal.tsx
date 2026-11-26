@@ -273,14 +273,16 @@ export function AboutModal({ open, appVersion, onClose }: AboutModalProps) {
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400">Installed version:</span>
                     <span className="font-mono text-slate-200">
-                      v{updateResult.current_version}
+                      v{updateResult.current_version.replace(/^v/, '')}
                     </span>
                   </div>
                   <div className="mt-1 flex items-center justify-between">
                     <span className="text-slate-400">Latest release:</span>
                     <span className="font-mono font-semibold text-[#00d8ff]">
                       {updateResult.latest_version
-                        ? `v${updateResult.latest_version}`
+                        ? (updateResult.latest_version.startsWith('v')
+                            ? updateResult.latest_version
+                            : `v${updateResult.latest_version}`)
                         : "Checking..."}
                     </span>
                   </div>
@@ -299,10 +301,22 @@ export function AboutModal({ open, appVersion, onClose }: AboutModalProps) {
                     <div className="mt-2 overflow-x-auto rounded border border-[#262b36] bg-black/60 p-2 font-mono text-[10.5px] text-[#9be000] select-text cursor-text">
                       {updateResult.update_command}
                     </div>
+                    {updateResult.download_url && (
+                      <div className="mt-3 flex justify-end">
+                        <a
+                          href={updateResult.download_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1 rounded bg-[#238636] px-3.5 py-1.5 text-xs font-semibold text-white shadow transition-colors hover:bg-[#2ea043]"
+                        >
+                          Download RPM
+                        </a>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="rounded-lg border border-[#9be000]/30 bg-[#9be000]/10 p-3 text-[#9be000]">
-                    You are running the latest version (v{updateResult.current_version}).
+                    You are running the latest version (v{updateResult.current_version.replace(/^v/, '')}).
                   </div>
                 )}
 

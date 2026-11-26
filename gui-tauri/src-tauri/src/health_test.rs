@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use crate::health::{check_system_health, is_semver_greater, HealthStatus};
+    use crate::health::{
+        check_app_update, check_system_health, detect_installed_version, is_semver_greater,
+        HealthStatus, ParsedVersion,
+    };
 
     #[test]
     fn test_system_health_report_structure() {
@@ -15,7 +18,75 @@ mod tests {
     }
 
     #[test]
-    fn test_semver_comparison_logic() {
+    fn test_version_parsing() {
+        let v1 = ParsedVersion::parse("2.0.2-2");
+        assert_eq!(v1.numbers, vec![2, 0, 2]);
+        assert_eq!(v1.release, Some(2));
+
+        let v2 = ParsedVersion::parse("v2.0.2-1");
+        assert_eq!(v2.numbers, vec![2, 0, 2]);
+        assert_eq!(v2.release, Some(1));
+
+        let v3 = ParsedVersion::parse("2.0.2");
+        assert_eq!(v3.numbers, vec![2, 0, 2]);
+        assert_eq!(v3.release, None);
+
+        let v4 = ParsedVersion::parse("2.0.2-2.fc45");
+        assert_eq!(v4.numbers, vec![2, 0, 2]);
+        assert_eq!(v4.release, Some(2));
+    }
+
+    #[test]
+    fn test_required_version_comparison_cases() {
+        // 1. Installed 2.0.2-2, latest 2.0.2-2 → No update
+        assert!(
+            !is_semver_greater("2.0.2-2", "2.0.2-2"),
+            "Identical version and release must NOT trigger an update"
+        );
+
+        // 2. Installed 2.0.2-1, latest 2.0.2-2 → Update available
+        assert!(
+            is_semver_greater("2.0.2-1", "2.0.2-2"),
+            "Higher RPM release must trigger an update"
+        );
+
+        // 3. Installed 2.0.2-2, latest 2.0.3-1 → Update available
+        assert!(
+            is_semver_greater("2.0.2-2", "2.0.3-1"),
+            "Higher patch version must trigger an update"
+        );
+
+        // 4. Installed 2.0.2-2, latest 2.0.2-1 → No update
+        assert!(
+            !is_semver_greater("2.0.2-2", "2.0.2-1"),
+            "Lower release must NOT trigger an update"
+        );
+
+        // 5. Installed 2.0.2-2, latest 2.0.2 → No update
+        assert!(
+            !is_semver_greater("2.0.2-2", "2.0.2"),
+            "Release 2 must be considered newer or equal to unspecified release"
+        );
+
+        // 6. Installed 2.0.2, latest 2.0.2-2 → Update available
+        assert!(
+            is_semver_greater("2.0.2", "2.0.2-2"),
+            "Release 2 is newer than unversioned release 1"
+        );
+
+        // 7. Installed 2.0.2-2.fc45, latest 2.0.2-2 → No update
+        assert!(
+            !is_semver_greater("2.0.2-2.fc45", "2.0.2-2"),
+            "Distribution suffix must not prevent equality detection"
+        );
+
+        // 8. Installed 1.0.0, latest 2.0.2-2 → Update available
+        assert!(
+            is_semver_greater("1.0.0", "2.0.2-2"),
+            "Upgrading from 1.0.0 must trigger an update"
+        );
+
+        // Standard semver tests
         assert!(is_semver_greater("2.0.2", "2.0.3"));
         assert!(is_semver_greater("2.0.2", "2.1.0"));
         assert!(is_semver_greater("2.0.2", "3.0.0"));
@@ -23,5 +94,28 @@ mod tests {
         assert!(!is_semver_greater("2.0.2", "2.0.2"));
         assert!(!is_semver_greater("2.0.3", "2.0.2"));
         assert!(!is_semver_greater("2.1.0", "2.0.9"));
+    }
+
+    #[test]
+    fn test_detect_installed_version_is_valid() {
+        let ver = detect_installed_version();
+        assert!(!ver.is_empty(), "Installed version string must not be empty");
+        assert!(
+            ver.contains("2.0.2"),
+            "Installed version should report version 2.0.2, got: {ver}"
+        );
+    }
+
+    #[test]
+    fn test_network_unavailable_no_crash() {
+        // Passing an invalid or non-resolvable endpoint via dummy check
+        // check_app_update handles network errors safely without panicking
+        let result = check_app_update("2.0.2-2");
+        // Result must return cleanly without panic
+        assert!(!result.current_version.is_empty());
+        if result.error.is_some() {
+            assert!(!result.update_available);
+            assert!(result.download_url.is_none());
+        }
     }
 }

@@ -68,13 +68,13 @@ export function UpdateNotificationModal({
             <div className="flex flex-col">
               <span className="text-[#8b949e]">Installed Version</span>
               <span className="font-mono text-slate-200">
-                v{updateInfo.current_version}
+                v{updateInfo.current_version.replace(/^v/, '')}
               </span>
             </div>
             <div className="flex flex-col text-right">
               <span className="text-[#8b949e]">Latest Release</span>
               <span className="font-mono font-semibold text-[#00d8ff]">
-                v{updateInfo.latest_version}
+                v{(updateInfo.latest_version || '').replace(/^v/, '')}
               </span>
             </div>
           </div>

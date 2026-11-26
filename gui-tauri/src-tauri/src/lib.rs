@@ -13,10 +13,15 @@ use tauri::State;
 
 use dbus::{AcerControlDBus, FanStatus};
 use desktop_controls::{DesktopControlsManager, DesktopControlsState};
-use health::{check_app_update, check_system_health, SystemHealthReport, UpdateCheckResult};
+use health::{check_app_update, check_system_health, detect_installed_version, SystemHealthReport, UpdateCheckResult};
 use keyboard::{KeyboardManager, KeyboardState};
 use preferences::{PreferencesManager, PreferencesState};
 use telemetry::{SystemIdentity, TelemetryCollector, TelemetrySnapshot};
+
+#[tauri::command]
+fn get_app_version() -> String {
+    detect_installed_version()
+}
 
 #[tauri::command]
 fn get_system_health() -> SystemHealthReport {
@@ -230,6 +235,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            get_app_version,
             get_system_health,
             check_updates,
             get_system_identity,
