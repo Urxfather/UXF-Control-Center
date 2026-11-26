@@ -48,6 +48,38 @@ UXF-Control-Center safely checks DMI identifiers on startup. If an unverified or
 
 ---
 
+## Feature Showcase
+
+Live screen captures recorded directly on an Acer Aspire 7 A715-79G running Fedora Linux.
+
+### 1. System Dashboard & Monitoring
+Real-time telemetry showing live CPU frequencies, dial gauge animations, diode temperatures, dual-channel fan tachometers, memory/storage allocation, and desktop controls.
+
+![System Monitoring](docs/screenshots/system-monitoring.gif)
+
+---
+
+### 2. Keyboard LED & RGB Control
+Single-zone RGB backlight customization with dynamic 360° color wheel selection, palette presets, 4-step backlight brightness, Rainbow gradient cycle, and Breathing pulse animations.
+
+![Keyboard & RGB Control](docs/screenshots/keyboard-rgb.gif)
+
+---
+
+### 3. Upcoming Features
+Preview of upcoming architectural modules currently under active development. Flexikey (custom macro and key remapping) and FlexiCharger (battery charge threshold limiter) are not yet available in the current release.
+
+![Upcoming Features](docs/screenshots/coming-soon.gif)
+
+---
+
+### 4. Complete Feature Overview
+All-in-one information and diagnostic modal accessible via the navigation header. Includes system identity, live multi-subsystem First-Launch Health Diagnostics (kernel modules, Secure Boot MOK keys, D-Bus daemon, device permissions), and the automated GitHub update checker.
+
+![Complete Feature Overview](docs/screenshots/feature-overview.gif)
+
+---
+
 ## Installation (Fedora 45 / x86_64)
 
 UXF-Control-Center is packaged as a production-grade RPM package that handles dependency resolution, DKMS driver compilation, udev permissions, and systemd service startup automatically.
