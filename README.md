@@ -48,6 +48,91 @@ UXF-Control-Center safely checks DMI identifiers on startup. If an unverified or
 
 ---
 
+## Screenshots & Application Preview
+
+Every screenshot below is captured directly from the running UXF-Control-Center application on an Acer Aspire 7 A715-79G (`AlgAl15g53`) under Linux.
+
+### Dashboard
+The central control center view presents hardware identification, real-time CPU tachometer dial, fan status, memory/storage gauges, and desktop control sliders in an ultra-responsive dark interface.
+
+![UXF-Control-Center Dashboard](docs/screenshots/dashboard.png)
+*Figure 1: Full UXF-Control-Center main dashboard featuring live telemetry, tachometer dial, and system toggles.*
+
+---
+
+### Performance & Cooling
+Monitor live thermal conditions, core clocks, and fan RPM speeds. Switch cooling profiles between Dynamic Auto and Maximum fan speed with instant D-Bus hardware response.
+
+![CPU, GPU, and System Telemetry](docs/screenshots/system-telemetry.png)
+*Figure 2: Real-time telemetry monitoring for Intel Core 5 210H, NVIDIA graphics, RAM allocation, and CPU frequency.*
+
+![Fan Monitoring and Cooling Controls](docs/screenshots/fan-controls.png)
+*Figure 3: Dual-channel fan tachometers (CPU & GPU Fan RPM) and Auto / Max cooling mode controls.*
+
+---
+
+### Keyboard & RGB Lighting
+Customizable RGB keyboard backlight with 4-step brightness levels, interactive color wheel, hex color codes, and animated lighting modes.
+
+![Keyboard RGB Static Colour Controls](docs/screenshots/keyboard-rgb-static.png)
+*Figure 4: Single-zone RGB static lighting with 360° color wheel, preset color palettes, and real-time layout preview.*
+
+![Rainbow Wave Lighting Mode](docs/screenshots/keyboard-rgb-rainbow.png)
+*Figure 5: Rainbow Wave spectrum cycling mode.*
+
+![Breathing Pulse Mode](docs/screenshots/keyboard-rgb-breathing.png)
+*Figure 6: Breathing Pulse lighting mode.*
+
+![Breathing Pulse Live Animation](docs/screenshots/keyboard-rgb-breathing.gif)
+*Figure 7: Live animation demonstration of Breathing Pulse mode on the virtual keyboard preview.*
+
+![Keyboard Brightness & Sleep Timer](docs/screenshots/keyboard-brightness.png)
+*Figure 8: 4-step backlight brightness slider and GNOME Mutter idle-sleep timer configuration.*
+
+---
+
+### System Controls
+Seamless desktop environment integrations that work alongside GNOME and systemd.
+
+![Blue Light & Night Light Controls](docs/screenshots/blue-light.png)
+*Figure 9: GNOME Night Light warmth slider and automated sunrise/sunset schedule integration.*
+
+![System Volume Controls](docs/screenshots/volume-controls.png)
+*Figure 10: Desktop audio volume slider with instant hardware mute toggle.*
+
+---
+
+### Preferences & Diagnostics
+Hardware-aware preferences grid and built-in First-Launch Diagnostics to verify driver and subsystem health.
+
+![Preferences Grid](docs/screenshots/preferences.png)
+*Figure 11: System preferences grid with hardware and desktop toggles.*
+
+![Super Lock & Gaming Toggles](docs/screenshots/super-lock.png)
+*Figure 12: Super Lock (Windows key lock), Super-Fn swap, and Fn Lock gaming preferences.*
+
+![System Health Check Diagnostics](docs/screenshots/health-check.png)
+*Figure 13: Integrated Health Diagnostic tool verifying DMI hardware matching, DKMS driver compilation, loaded kernel modules, Secure Boot MOK keys, D-Bus daemon connectivity, and device permissions.*
+
+![About Dialog](docs/screenshots/about.png)
+*Figure 14: About dialog showing application identity, official release version `v2.0.2-2`, maintainer info, and GPL-3.0 licensing.*
+
+![GitHub Update Checker](docs/screenshots/update-checker.png)
+*Figure 15: Background GitHub Releases update checker reporting current version parity.*
+
+---
+
+### Coming Soon
+Unfinished features are transparently displayed in their current development state with planned architectural roadmaps.
+
+![Flexikey — Coming Soon](docs/screenshots/flexikey-coming-soon.png)
+*Figure 16: Flexikey key-remapping and macro configuration section (Coming Soon — under architectural development).*
+
+![FlexiCharger — Coming Soon](docs/screenshots/flexicharger-coming-soon.png)
+*Figure 17: FlexiCharger battery charge threshold limiter section (Coming Soon — requires platform EC battery threshold support).*
+
+---
+
 ## Installation (Fedora 45 / x86_64)
 
 UXF-Control-Center is packaged as a production-grade RPM package that handles dependency resolution, DKMS driver compilation, udev permissions, and systemd service startup automatically.

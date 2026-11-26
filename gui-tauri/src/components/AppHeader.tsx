@@ -1,4 +1,4 @@
-import { useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AboutModal } from "./AboutModal";
 import {
@@ -25,6 +25,14 @@ export function AppHeader({
 }: AppHeaderProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const infoWrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleSetModal = (e: CustomEvent<boolean>) => {
+      setModalOpen(e.detail);
+    };
+    window.addEventListener("uxf-set-modal-open" as any, handleSetModal as any);
+    return () => window.removeEventListener("uxf-set-modal-open" as any, handleSetModal as any);
+  }, []);
 
   const stopDragPropagation = (event: MouseEvent<HTMLElement>) => {
     event.stopPropagation();

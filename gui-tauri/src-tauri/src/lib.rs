@@ -24,6 +24,19 @@ fn get_app_version() -> String {
 }
 
 #[tauri::command]
+fn get_capture_mode() -> bool {
+    std::env::var("UXF_GALLERY_CAPTURE").is_ok()
+}
+
+#[tauri::command]
+fn report_capture_step(step: String) {
+    if let Ok(mut file) = std::fs::File::create("/tmp/uxf_capture_step.txt") {
+        use std::io::Write;
+        let _ = writeln!(file, "{step}");
+    }
+}
+
+#[tauri::command]
 fn get_system_health() -> SystemHealthReport {
     check_system_health()
 }
@@ -235,6 +248,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            get_capture_mode,
+            report_capture_step,
             get_app_version,
             get_system_health,
             check_updates,

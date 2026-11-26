@@ -237,6 +237,25 @@ export function KeyboardPage() {
     void setSleepTimer(nextEnabled, total);
   };
 
+  useEffect(() => {
+    const handleSetEffect = (e: CustomEvent<string>) => {
+      if (e.detail) {
+        void setEffect(e.detail as any);
+      }
+    };
+    const handleSetColor = (e: CustomEvent<{ r: number; g: number; b: number }>) => {
+      if (e.detail) {
+        void setColor([e.detail.r, e.detail.g, e.detail.b]);
+      }
+    };
+    window.addEventListener("uxf-set-keyboard-effect" as any, handleSetEffect as any);
+    window.addEventListener("uxf-set-keyboard-color" as any, handleSetColor as any);
+    return () => {
+      window.removeEventListener("uxf-set-keyboard-effect" as any, handleSetEffect as any);
+      window.removeEventListener("uxf-set-keyboard-color" as any, handleSetColor as any);
+    };
+  }, []);
+
   return (
     <section
       aria-labelledby="led-keyboard-heading"

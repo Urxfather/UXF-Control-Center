@@ -56,6 +56,18 @@ export function AboutModal({ open, appVersion, onClose }: AboutModalProps) {
   };
 
   useEffect(() => {
+    const handleSetTab = (e: CustomEvent<"about" | "health" | "updates">) => {
+      if (e.detail) {
+        setActiveTab(e.detail);
+        if (e.detail === "health") void runHealthCheck();
+        if (e.detail === "updates") void runUpdateCheck();
+      }
+    };
+    window.addEventListener("uxf-set-about-tab" as any, handleSetTab as any);
+    return () => window.removeEventListener("uxf-set-about-tab" as any, handleSetTab as any);
+  }, []);
+
+  useEffect(() => {
     if (open) {
       if (activeTab === "health" && !healthReport) {
         void runHealthCheck();

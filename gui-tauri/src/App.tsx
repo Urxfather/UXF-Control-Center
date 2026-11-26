@@ -76,6 +76,95 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let unmounted = false;
+    const runCaptureSequence = async () => {
+      const isCapture = await invoke<boolean>("get_capture_mode").catch(() => false);
+      if (!isCapture) return;
+
+      const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      // Initial settle time for daemon telemetry polling and live sensors
+      await sleep(3000);
+      if (unmounted) return;
+
+      const notifyStep = async (step: string, delayAfter = 1500) => {
+        if (unmounted) return;
+        await invoke("report_capture_step", { step }).catch(() => {});
+        await sleep(delayAfter);
+      };
+
+      // 1. Main Dashboard
+      setActiveSectionId("system");
+      await sleep(800);
+      await notifyStep("dashboard");
+
+      // 2. Keyboard - Static RGB
+      setActiveSectionId("keyboard");
+      await sleep(800);
+      window.dispatchEvent(new CustomEvent("uxf-set-keyboard-effect", { detail: "static" }));
+      window.dispatchEvent(new CustomEvent("uxf-set-keyboard-color", { detail: { r: 0, g: 216, b: 255 } }));
+      await sleep(600);
+      await notifyStep("keyboard-rgb-static");
+
+      // 3. Keyboard - Rainbow Wave
+      window.dispatchEvent(new CustomEvent("uxf-set-keyboard-effect", { detail: "rainbow" }));
+      await sleep(1000);
+      await notifyStep("keyboard-rgb-rainbow");
+
+      // 4. Keyboard - Breathing Pulse (stays longer so frames can be captured for GIF)
+      window.dispatchEvent(new CustomEvent("uxf-set-keyboard-effect", { detail: "breathing" }));
+      await sleep(1000);
+      await notifyStep("keyboard-rgb-breathing", 3500);
+
+      // Restore static
+      window.dispatchEvent(new CustomEvent("uxf-set-keyboard-effect", { detail: "static" }));
+      await sleep(400);
+
+      // 5. Flexikey Coming Soon
+      setActiveSectionId("flexikey");
+      await sleep(800);
+      await notifyStep("flexikey-coming-soon");
+
+      // 6. FlexiCharger Coming Soon
+      setActiveSectionId("flexicharger");
+      await sleep(800);
+      await notifyStep("flexicharger-coming-soon");
+
+      // 7. About Modal - About Tab
+      setActiveSectionId("system");
+      await sleep(400);
+      window.dispatchEvent(new CustomEvent("uxf-set-modal-open", { detail: true }));
+      await sleep(400);
+      window.dispatchEvent(new CustomEvent("uxf-set-about-tab", { detail: "about" }));
+      await sleep(800);
+      await notifyStep("about");
+
+      // 8. About Modal - Health Check Tab
+      window.dispatchEvent(new CustomEvent("uxf-set-about-tab", { detail: "health" }));
+      await sleep(2000); // Give health scan time to execute
+      await notifyStep("health-check");
+
+      // 9. About Modal - Updates Tab
+      window.dispatchEvent(new CustomEvent("uxf-set-about-tab", { detail: "updates" }));
+      await sleep(2500); // Give update check time to query GitHub API
+      await notifyStep("update-checker");
+
+      // Close modal
+      window.dispatchEvent(new CustomEvent("uxf-set-modal-open", { detail: false }));
+      await sleep(400);
+
+      // Signal completion
+      await notifyStep("DONE");
+    };
+
+    void runCaptureSequence();
+
+    return () => {
+      unmounted = true;
+    };
+  }, []);
+
   const activeSection =
     NAV_SECTIONS.find((section) => section.id === activeSectionId) ??
     NAV_SECTIONS[0];
