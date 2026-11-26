@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=UXF-Control-Center
+Comment=Control Acer laptop hardware on Linux
+Exec=/usr/bin/uxf-control-center
+TryExec=/usr/bin/uxf-control-center
+Icon=uxf-control-center
+Terminal=false
+Type=Application
+Categories=Settings;HardwareSettings;
+StartupNotify=true
+StartupWMClass=UXF-Control-Center
+DBusActivatable=false

@@ -1,0 +1,25 @@
+[package]
+name = "uxf-control-center-tauri"
+version = "1.0.0"
+description = "Modern Tauri + React control center for Acer gaming laptops on Linux"
+authors = ["Urxfather / UXF⚡"]
+edition = "2024"
+rust-version = "1.90"
+
+[lib]
+name = "uxf_control_center_tauri_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libc = "0.2"
+zbus = { version = "5", features = ["blocking"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

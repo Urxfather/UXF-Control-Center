@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    background: transparent !important;
+    color: #e5e7eb;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #07090c;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #262b36;
+    border-radius: 3px;
+  }
+}
+
+@keyframes uxf-kbd-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.08;
+  }
+}
+
+.uxf-kbd-breathing-layer {
+  animation: uxf-kbd-breathe 1.6s ease-in-out infinite;
+  will-change: opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .uxf-kbd-breathing-layer {
+    animation-duration: 3.2s;
+  }
+}
+
+@keyframes uxf-tab-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.uxf-tab-fade {
+  animation: uxf-tab-enter 150ms ease-out;
+}

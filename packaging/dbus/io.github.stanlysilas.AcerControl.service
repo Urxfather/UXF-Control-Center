@@ -1,0 +1,5 @@
+[D-BUS Service]
+Name=io.github.stanlysilas.AcerControl
+Exec=/usr/bin/acer-control-daemon
+User=root
+SystemdService=acer-control-daemon.service

@@ -1,0 +1,106 @@
+name: uxf-control-center
+arch: amd64
+platform: linux
+version: ${VERSION}
+release: "2"
+section: utils
+priority: optional
+maintainer: Urxfather <170594861+Urxfather@users.noreply.github.com>
+description: Modern Linux control center and DKMS driver for supported Acer gaming laptops.
+vendor: Urxfather / UXF⚡
+homepage: https://github.com/Urxfather/UXF-Control-Center
+license: GPL-3.0-or-later
+replaces:
+  - acer-control-center <= 2.0.1-1
+provides:
+  - acer-control-center = ${VERSION}
+contents:
+  - src: target/package-stage/usr/bin/uxf-control-center
+    dst: /usr/bin/uxf-control-center
+  - src: target/package-stage/usr/bin/uxf-control-center-tauri
+    dst: /usr/bin/uxf-control-center-tauri
+  - src: target/package-stage/usr/bin/acer-control-center
+    dst: /usr/bin/acer-control-center
+  - src: target/package-stage/usr/bin/acer-control-daemon
+    dst: /usr/bin/acer-control-daemon
+  - src: target/package-stage/usr/${LIB_SUBDIR}/libacercontrol.so*
+    dst: /usr/${LIB_SUBDIR}/
+    expand: true
+  - src: target/package-stage/usr/share/acer-control-center/
+    dst: /usr/share/acer-control-center
+    type: tree
+  - src: target/package-stage/usr/src/acer-keyboard-0.1.1/
+    dst: /usr/src/acer-keyboard-0.1.1
+    type: tree
+  - src: packaging/systemd/acer-control-daemon.service
+    dst: /usr/lib/systemd/system/acer-control-daemon.service
+  - src: packaging/udev/99-acercontrol.rules
+    dst: /etc/udev/rules.d/99-acercontrol.rules
+    type: config|noreplace
+  - src: packaging/modules-load/uxf-control-center.conf
+    dst: /usr/lib/modules-load.d/uxf-control-center.conf
+  - src: packaging/dbus/io.github.stanlysilas.AcerControl.conf
+    dst: /usr/share/dbus-1/system.d/io.github.stanlysilas.AcerControl.conf
+  - src: packaging/dbus/io.github.stanlysilas.AcerControl.service
+    dst: /usr/share/dbus-1/system-services/io.github.stanlysilas.AcerControl.service
+  - src: packaging/desktop/uxf-control-center.desktop
+    dst: /usr/share/applications/uxf-control-center.desktop
+  - src: gui-tauri/src-tauri/icons/icon.png
+    dst: /usr/share/icons/hicolor/512x512/apps/uxf-control-center.png
+  - src: gui-tauri/src-tauri/icons/128x128.png
+    dst: /usr/share/icons/hicolor/128x128/apps/uxf-control-center.png
+  - src: gui-tauri/src-tauri/icons/32x32.png
+    dst: /usr/share/icons/hicolor/32x32/apps/uxf-control-center.png
+  - src: gui/resources/icons/acer-control-center.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/acer-control-center.svg
+  - src: gui/resources/icons/acer-control-center.png
+    dst: /usr/share/icons/hicolor/128x128/apps/acer-control-center.png
+  - src: LICENSE
+    dst: /usr/share/licenses/uxf-control-center/LICENSE
+  - src: README.md
+    dst: /usr/share/doc/uxf-control-center/README.md
+  - src: packaging/scripts/preinstall.sh
+    dst: /usr/share/uxf-control-center/package-preinstall
+    file_info:
+      mode: 0755
+  - src: packaging/scripts/postinstall.sh
+    dst: /usr/share/uxf-control-center/package-postinstall
+    file_info:
+      mode: 0755
+  - src: packaging/scripts/posttrans.sh
+    dst: /usr/share/uxf-control-center/package-posttrans
+    file_info:
+      mode: 0755
+  - src: packaging/scripts/postremove.sh
+    dst: /usr/share/uxf-control-center/package-postremove
+    file_info:
+      mode: 0755
+scripts:
+  preinstall: packaging/scripts/preinstall.sh
+  postinstall: packaging/scripts/postinstall.sh
+  postremove: packaging/scripts/postremove.sh
+overrides:
+  rpm:
+    depends:
+      - dkms
+      - kernel-devel-matched
+      - gcc
+      - make
+      - openssl
+      - mokutil
+      - systemd
+      - shadow-utils
+      - libX11.so.6()(64bit)
+      - libxkbcommon.so.0()(64bit)
+      - libwayland-client.so.0()(64bit)
+      - libGL.so.1()(64bit)
+      - libEGL.so.1()(64bit)
+      - libwebkit2gtk-4.1.so.0()(64bit)
+      - libgtk-3.so.0()(64bit)
+      - libsoup-3.0.so.0()(64bit)
+      - libdbus-1.so.3()(64bit)
+rpm:
+  arch: x86_64
+  scripts:
+    posttrans: packaging/scripts/posttrans.sh
+

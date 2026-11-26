@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "UXF-Control-Center",
+  "version": "1.0.0",
+  "identifier": "io.github.uxf.controlcenter",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "UXF-Control-Center",
+        "width": 1080,
+        "height": 680,
+        "minWidth": 760,
+        "minHeight": 500,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "copyright": "Copyright (C) 2026 Urxfather / UXF⚡ (GPL-3.0-or-later)",
+    "category": "Settings",
+    "shortDescription": "Modern Tauri+React control center for Acer gaming laptops on Linux",
+    "longDescription": "Modern Tauri+React control center for Acer gaming laptops on Linux. Controls keyboard RGB, fan profiles, system preferences, and hardware telemetry."
+  }
+}

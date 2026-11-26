@@ -1,0 +1,18 @@
+[Unit]
+Description=Acer Control Daemon
+After=dbus.service
+Wants=dbus.service
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/sbin/modprobe -b acer_keyboard
+ExecStartPre=-/usr/sbin/modprobe -b acer_acpi
+ExecStartPre=-/usr/sbin/modprobe -b acer_io
+ExecStart=/usr/bin/acer-control-daemon
+Restart=on-failure
+RestartSec=2s
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
