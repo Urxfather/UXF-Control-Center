@@ -470,14 +470,8 @@ pub struct PreferencesManager {
 
 impl PreferencesManager {
     pub fn new() -> Self {
-        let saved = Self::read_overlay_key_raw()
-            .ok()
-            .map(|s| parse_gsettings_string(&s))
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "Super_L".to_owned());
-
         Self {
-            saved_overlay_key: Mutex::new(saved),
+            saved_overlay_key: Mutex::new("Super_L".to_owned()),
             action_lock: Mutex::new(()),
             uinput_worker: UinputLockWorker::new_live(),
             cached_state: Mutex::new(None),

@@ -1397,15 +1397,32 @@ pub struct DesktopControlsManager {
 }
 
 impl DesktopControlsManager {
+    #[cfg(test)]
     pub fn new() -> Arc<Self> {
+        Self::new_with_probe(true)
+    }
+
+    pub fn new_deferred() -> Arc<Self> {
+        Self::new_with_probe(false)
+    }
+
+    fn new_with_probe(probe_initial: bool) -> Arc<Self> {
         let gio = GioSettingsLib::load().ok().map(Arc::new);
         let (pa_tx, pa_rx) = mpsc::channel::<()>();
         let pulse = Arc::new(PulseAudioService::new(pa_tx));
 
-        let initial = DesktopControlsState {
-            brightness: query_brightness_blocking(),
-            blue_light: query_blue_light_blocking(gio.as_deref()),
-            volume: pulse.ensure_connected_query(),
+        let initial = if probe_initial {
+            DesktopControlsState {
+                brightness: query_brightness_blocking(),
+                blue_light: query_blue_light_blocking(gio.as_deref()),
+                volume: pulse.ensure_connected_query(),
+            }
+        } else {
+            DesktopControlsState {
+                brightness: BrightnessState::unavailable("Initializing brightness..."),
+                blue_light: BlueLightState::unavailable("Initializing Night Light..."),
+                volume: VolumeState::unavailable("Initializing audio..."),
+            }
         };
 
         let mgr = Arc::new(Self {
@@ -1424,7 +1441,14 @@ impl DesktopControlsManager {
 
     pub fn start_event_watchers(self: &Arc<Self>, app: AppHandle) {
         self.spawn_dbus_watcher(app.clone());
-        self.spawn_pulse_emitter(app);
+        self.spawn_pulse_emitter(app.clone());
+        let mgr = Arc::clone(self);
+        let _ = thread::Builder::new()
+            .name("uxf-desktop-init".into())
+            .spawn(move || {
+                let next = mgr.refresh_all();
+                let _ = app.emit(DESKTOP_CONTROLS_EVENT, next);
+            });
     }
 
     pub fn snapshot(&self) -> DesktopControlsState {

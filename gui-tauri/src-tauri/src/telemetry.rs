@@ -2,8 +2,7 @@ use std::ffi::c_void;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Condvar, Mutex, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -318,33 +317,54 @@ impl Drop for NvmlLibrary {
 }
 
 pub struct TelemetryCollector {
-    identity: SystemIdentity,
+    identity: Arc<RwLock<SystemIdentity>>,
     snapshot: Arc<RwLock<TelemetrySnapshot>>,
-    running: Arc<AtomicBool>,
+    shutdown: Arc<(Mutex<bool>, Condvar)>,
     worker_handle: Option<JoinHandle<()>>,
 }
 
 impl TelemetryCollector {
     pub fn new() -> Self {
-        let dgpu_runtime_path = find_nvidia_runtime_status_path();
-        let identity = detect_system_identity(dgpu_runtime_path.as_deref());
+        let initial_identity = detect_cpu_identity_fast();
+        let identity = Arc::new(RwLock::new(initial_identity));
         let snapshot = Arc::new(RwLock::new(TelemetrySnapshot::default()));
-        let running = Arc::new(AtomicBool::new(true));
+        let shutdown = Arc::new((Mutex::new(false), Condvar::new()));
 
+        let identity_clone = Arc::clone(&identity);
         let snapshot_clone = Arc::clone(&snapshot);
-        let running_clone = Arc::clone(&running);
+        let shutdown_clone = Arc::clone(&shutdown);
 
         let worker_handle = thread::Builder::new()
             .name("uxf-telemetry".into())
             .spawn(move || {
+                let dgpu_runtime_path = find_nvidia_runtime_status_path();
+                let full_identity = detect_system_identity(dgpu_runtime_path.as_deref());
+                if let Ok(mut guard) = identity_clone.write() {
+                    *guard = full_identity;
+                }
+
                 let acer_lib = AcerControlLib::load();
                 let mut nvml: Option<NvmlLibrary> = None;
 
                 let (_, mut prev_idle, mut prev_total) = sample_cpu_load(0, 0);
                 // Short warmup slice so the very first UI snapshot already carries real CPU load %.
-                thread::sleep(Duration::from_millis(120));
+                {
+                    let (lock, cvar) = &*shutdown_clone;
+                    if let Ok(stopped) = lock.lock() {
+                        if !*stopped {
+                            let _ = cvar.wait_timeout(stopped, Duration::from_millis(120));
+                        }
+                    }
+                }
 
-                while running_clone.load(Ordering::Relaxed) {
+                loop {
+                    {
+                        let (lock, _) = &*shutdown_clone;
+                        if lock.lock().map(|g| *g).unwrap_or(true) {
+                            break;
+                        }
+                    }
+
                     let (utilization_pct, cur_idle, cur_total) =
                         sample_cpu_load(prev_idle, prev_total);
                     prev_idle = cur_idle;
@@ -409,7 +429,18 @@ impl TelemetryCollector {
                         *guard = next;
                     }
 
-                    thread::sleep(Duration::from_millis(1000));
+                    let (lock, cvar) = &*shutdown_clone;
+                    if let Ok(stopped) = lock.lock() {
+                        if *stopped {
+                            break;
+                        }
+                        let (after, _) = cvar
+                            .wait_timeout(stopped, Duration::from_millis(1000))
+                            .unwrap_or_else(|e| e.into_inner());
+                        if *after {
+                            break;
+                        }
+                    }
                 }
             })
             .ok();
@@ -417,13 +448,20 @@ impl TelemetryCollector {
         Self {
             identity,
             snapshot,
-            running,
+            shutdown,
             worker_handle,
         }
     }
 
     pub fn identity(&self) -> SystemIdentity {
-        self.identity.clone()
+        self.identity
+            .read()
+            .map(|g| g.clone())
+            .unwrap_or_else(|_| detect_cpu_identity_fast())
+    }
+
+    pub fn identity_handle(&self) -> Arc<RwLock<SystemIdentity>> {
+        Arc::clone(&self.identity)
     }
 
     pub fn snapshot(&self) -> TelemetrySnapshot {
@@ -433,7 +471,11 @@ impl TelemetryCollector {
 
 impl Drop for TelemetryCollector {
     fn drop(&mut self) {
-        self.running.store(false, Ordering::Relaxed);
+        let (lock, cvar) = &*self.shutdown;
+        if let Ok(mut stopped) = lock.lock() {
+            *stopped = true;
+            cvar.notify_all();
+        }
         if let Some(handle) = self.worker_handle.take() {
             let _ = handle.join();
         }
@@ -471,7 +513,7 @@ fn is_dgpu_suspended(runtime_status_path: Option<&Path>) -> bool {
         .unwrap_or(false)
 }
 
-fn detect_system_identity(runtime_status_path: Option<&Path>) -> SystemIdentity {
+fn detect_cpu_identity_fast() -> SystemIdentity {
     let cpu_model = fs::read_to_string("/proc/cpuinfo")
         .ok()
         .and_then(|text| {
@@ -487,6 +529,18 @@ fn detect_system_identity(runtime_status_path: Option<&Path>) -> SystemIdentity 
         .and_then(|v| v.trim().parse::<u64>().ok())
         .map(|khz| ((khz + 999_999) / 1_000_000).clamp(5, 8) as u32)
         .unwrap_or(5);
+
+    SystemIdentity {
+        cpu_model,
+        gpu_model: "Detecting GPU...".into(),
+        cpu_max_ghz,
+    }
+}
+
+fn detect_system_identity(runtime_status_path: Option<&Path>) -> SystemIdentity {
+    let fast = detect_cpu_identity_fast();
+    let cpu_model = fast.cpu_model;
+    let cpu_max_ghz = fast.cpu_max_ghz;
 
     let mut gpu_model = None;
     if !is_dgpu_suspended(runtime_status_path) {

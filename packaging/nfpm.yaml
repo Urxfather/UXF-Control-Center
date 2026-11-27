@@ -2,7 +2,7 @@ name: uxf-control-center
 arch: amd64
 platform: linux
 version: ${VERSION}
-release: "3"
+release: "4"
 section: utils
 priority: optional
 maintainer: Urxfather <170594861+Urxfather@users.noreply.github.com>
@@ -47,8 +47,12 @@ contents:
     dst: /usr/share/applications/uxf-control-center.desktop
   - src: gui-tauri/src-tauri/icons/icon.png
     dst: /usr/share/icons/hicolor/512x512/apps/uxf-control-center.png
+  - src: gui-tauri/src-tauri/icons/128x128@2x.png
+    dst: /usr/share/icons/hicolor/256x256/apps/uxf-control-center.png
   - src: gui-tauri/src-tauri/icons/128x128.png
     dst: /usr/share/icons/hicolor/128x128/apps/uxf-control-center.png
+  - src: gui-tauri/src-tauri/icons/64x64.png
+    dst: /usr/share/icons/hicolor/64x64/apps/uxf-control-center.png
   - src: gui-tauri/src-tauri/icons/32x32.png
     dst: /usr/share/icons/hicolor/32x32/apps/uxf-control-center.png
   - src: gui/resources/icons/acer-control-center.svg

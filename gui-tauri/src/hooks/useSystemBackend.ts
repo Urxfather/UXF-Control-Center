@@ -27,6 +27,7 @@ export function useSystemBackend() {
   const [backendError, setBackendError] = useState<string | null>(null);
 
   const inFlightRef = useRef(false);
+  const identityResolvedRef = useRef(false);
   const feedbackTimerRef = useRef<number | null>(null);
 
   const showFeedback = useCallback((feedback: FanFeedback) => {
@@ -48,6 +49,9 @@ export function useSystemBackend() {
         const result = await invoke<SystemIdentity>("get_system_identity");
         if (active) {
           setIdentity(result);
+          if (result.gpuModel && result.gpuModel !== "Detecting GPU...") {
+            identityResolvedRef.current = true;
+          }
         }
       } catch (err) {
         if (active) {
@@ -64,13 +68,25 @@ export function useSystemBackend() {
       }
       inFlightRef.current = true;
       try {
-        const [snapshot, fan] = await Promise.all([
+        const [snapshot, fan, refreshedIdentity] = await Promise.all([
           invoke<TelemetrySnapshot>("get_telemetry_snapshot"),
           invoke<FanStatus>("get_fan_status"),
+          !identityResolvedRef.current
+            ? invoke<SystemIdentity>("get_system_identity").catch(() => null)
+            : Promise.resolve(null),
         ]);
         if (active) {
           setTelemetry(snapshot);
           setFanStatus(fan);
+          if (refreshedIdentity) {
+            setIdentity(refreshedIdentity);
+            if (
+              refreshedIdentity.gpuModel &&
+              refreshedIdentity.gpuModel !== "Detecting GPU..."
+            ) {
+              identityResolvedRef.current = true;
+            }
+          }
           setBackendError(null);
         }
       } catch (err) {

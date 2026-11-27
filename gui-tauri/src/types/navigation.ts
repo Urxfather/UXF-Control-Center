@@ -1,7 +1,19 @@
-export type NavSectionId = "system" | "keyboard" | "flexikey" | "flexicharger";
+export type NavSectionId =
+  | "system"
+  | "keyboard"
+  | "flexikey"
+  | "flexicharger"
+  | "system-center";
+
+export type SystemCenterTabId =
+  | "overview"
+  | "health"
+  | "updates"
+  | "system-info"
+  | "about";
 
 export interface NavSection {
-  id: NavSectionId;
+  id: Exclude<NavSectionId, "system-center">;
   label: string;
   placeholderHeading: string;
   placeholderNote: string;
@@ -38,4 +50,15 @@ export const NAV_SECTIONS: readonly NavSection[] = [
     placeholderNote:
       "Battery charge threshold controls are not yet supported on this platform.",
   },
+];
+
+export const SYSTEM_CENTER_TABS: readonly {
+  id: SystemCenterTabId;
+  label: string;
+}[] = [
+  { id: "overview", label: "Overview" },
+  { id: "health", label: "Health" },
+  { id: "updates", label: "Updates" },
+  { id: "system-info", label: "System Info" },
+  { id: "about", label: "About" },
 ];

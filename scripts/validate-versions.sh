@@ -10,7 +10,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 echo "--> Checking version synchronization across UXF-Control-Center..."
 
 EXPECTED_BASE_VERSION="2.0.2"
-EXPECTED_RELEASE="3"
+EXPECTED_RELEASE="4"
 EXPECTED_FULL_VERSION="${EXPECTED_BASE_VERSION}-${EXPECTED_RELEASE}"
 
 ERRORS=0

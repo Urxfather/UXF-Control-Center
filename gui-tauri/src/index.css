@@ -1,5 +1,26 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./assets/fonts/inter-latin-wght-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("./assets/fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
+}
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
 @layer base {
   html,
   body,
@@ -8,7 +29,14 @@
     margin: 0;
     background: transparent !important;
     color: #e5e7eb;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  code,
+  kbd,
+  pre,
+  .font-mono {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
 
   ::-webkit-scrollbar {
@@ -23,27 +51,6 @@
   ::-webkit-scrollbar-thumb {
     background: #262b36;
     border-radius: 3px;
-  }
-}
-
-@keyframes uxf-kbd-breathe {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.08;
-  }
-}
-
-.uxf-kbd-breathing-layer {
-  animation: uxf-kbd-breathe 1.6s ease-in-out infinite;
-  will-change: opacity;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .uxf-kbd-breathing-layer {
-    animation-duration: 3.2s;
   }
 }
 

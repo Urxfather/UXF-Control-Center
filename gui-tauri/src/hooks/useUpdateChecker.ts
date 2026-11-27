@@ -65,11 +65,11 @@ export function useUpdateChecker(currentVersion: string) {
           try {
             activeVersion = await invoke<string>("get_app_version");
           } catch {
-            activeVersion = "2.0.2-3";
+            activeVersion = "2.0.2-4";
           }
         }
         if (!activeVersion || activeVersion === "1.0.0") {
-          activeVersion = "2.0.2-3";
+          activeVersion = "2.0.2-4";
         }
 
         const now = Date.now();

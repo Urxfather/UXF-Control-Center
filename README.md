@@ -3,7 +3,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
 [![Platform: Fedora Linux](https://img.shields.io/badge/Platform-Fedora%2045-blue.svg)](https://fedoraproject.org/)
 [![Architecture: x86_64](https://img.shields.io/badge/Arch-x86__64-brightgreen.svg)]()
-[![Release: v2.0.2-3](https://img.shields.io/badge/Release-v2.0.2--3-orange.svg)](https://github.com/Urxfather/UXF-Control-Center/releases)
+[![Release: v2.0.2-4](https://img.shields.io/badge/Release-v2.0.2--4-orange.svg)](https://github.com/Urxfather/UXF-Control-Center/releases)
 
 **UXF-Control-Center** is an independently maintained, modern Linux control center and DKMS hardware driver suite built specifically for supported Acer gaming laptops. 
 
@@ -85,13 +85,13 @@ All-in-one information and diagnostic modal accessible via the navigation header
 UXF-Control-Center is packaged as a production-grade RPM package that handles dependency resolution, DKMS driver compilation, udev permissions, and systemd service startup automatically.
 
 ### 1. Download the Latest RPM
-Download `uxf-control-center-2.0.2-3.x86_64.rpm` from [GitHub Releases](https://github.com/Urxfather/UXF-Control-Center/releases).
+Download `uxf-control-center-2.0.2-4.x86_64.rpm` from [GitHub Releases](https://github.com/Urxfather/UXF-Control-Center/releases).
 
 ### 2. Install via DNF
 Open a terminal in the folder where the RPM was downloaded and run:
 
 ```bash
-sudo dnf install ./uxf-control-center-2.0.2-3.x86_64.rpm
+sudo dnf install ./uxf-control-center-2.0.2-4.x86_64.rpm
 ```
 
 DNF will automatically resolve and install external dependencies (`dkms`, `kernel-devel-matched`, `libwebkit2gtk-4.1`, etc.), compile the kernel module for your running kernel, configure device permissions, and start the system daemon.
@@ -172,7 +172,7 @@ sudo dnf install \
    ```bash
    LIBDIR=/usr/lib64 packaging/build-package.sh rpm
    ```
-   The built RPM package will be located in `dist/uxf-control-center-2.0.2-3.x86_64.rpm`.
+   The built RPM package will be located in `dist/uxf-control-center-2.0.2-4.x86_64.rpm`.
 
 ---
 

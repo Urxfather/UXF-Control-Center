@@ -1,5 +1,10 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { rgbToHex, useKeyboardBackend } from "../../hooks/useKeyboardBackend";
+import {
+  applyKeyboardCssVars,
+  buildKeyboardCssVars,
+  evaluateKeyboardFrame,
+} from "../../utils/keyboardAnimation";
 import { ColorBacklightWheel } from "./ColorBacklightWheel";
 import { KeyboardPreview } from "./KeyboardPreview";
 
@@ -30,7 +35,6 @@ function BracketedDigitBox({
     <div className="flex flex-col items-start gap-1">
       <span className="text-[12px] font-medium text-[#9ca3af]">{label}</span>
       <div className="relative flex h-[44px] w-[44px] items-center justify-center bg-[#0d1118]">
-        {/* Reference corner brackets */}
         <span aria-hidden="true" className="pointer-events-none absolute top-0 left-0 h-2 w-2 border-t border-l border-[#9ca3af]/80" />
         <span aria-hidden="true" className="pointer-events-none absolute top-0 right-0 h-2 w-2 border-t border-r border-[#9ca3af]/80" />
         <span aria-hidden="true" className="pointer-events-none absolute bottom-0 left-0 h-2 w-2 border-b border-l border-[#9ca3af]/80" />
@@ -59,22 +63,35 @@ function BracketedDigitBox({
   );
 }
 
-function StepBrightnessSlider({
-  step,
+function ContinuousBrightnessSlider({
+  valueRaw,
+  targetRaw,
+  maxBrightness,
+  idleDimmed,
   disabled,
   onChange,
+  onToggleBacklight,
 }: {
-  step: number;
+  valueRaw: number;
+  targetRaw: number;
+  maxBrightness: number;
+  idleDimmed: boolean;
   disabled: boolean;
-  onChange: (nextStep: number) => void;
+  onChange: (nextRaw: number, commit: boolean) => void;
+  onToggleBacklight: () => void;
 }) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef(false);
+  const lastEmittedRef = useRef<number>(-1);
 
-  const clamped = Math.max(0, Math.min(4, Math.round(step)));
-  const pct = (clamped / 4) * 100;
+  const safeMax = Math.max(1, maxBrightness);
+  const clamped = Math.max(0, Math.min(safeMax, Math.round(valueRaw)));
+  const pctFill = (clamped / safeMax) * 100;
+  const gsdPct = clamped === 0 ? 0 : Math.max(1, Math.round((clamped * 100) / safeMax));
+  const targetPct = targetRaw === 0 ? 0 : Math.max(1, Math.round((targetRaw * 100) / safeMax));
+  const isOn = clamped > 0 || (idleDimmed && targetRaw > 0);
 
-  const stepFromPointer = (clientX: number): number => {
+  const rawFromPointer = (clientX: number): number => {
     const el = trackRef.current;
     if (!el) {
       return clamped;
@@ -84,7 +101,7 @@ function StepBrightnessSlider({
       return clamped;
     }
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    return Math.round(ratio * 4);
+    return Math.round(ratio * safeMax);
   };
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
@@ -94,20 +111,23 @@ function StepBrightnessSlider({
     e.preventDefault();
     draggingRef.current = true;
     e.currentTarget.setPointerCapture(e.pointerId);
-    onChange(stepFromPointer(e.clientX));
+    const next = rawFromPointer(e.clientX);
+    lastEmittedRef.current = next;
+    onChange(next, false);
   };
 
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     if (disabled || !draggingRef.current) {
       return;
     }
-    const next = stepFromPointer(e.clientX);
-    if (next !== clamped) {
-      onChange(next);
+    const next = rawFromPointer(e.clientX);
+    if (next !== lastEmittedRef.current) {
+      lastEmittedRef.current = next;
+      onChange(next, false);
     }
   };
 
-  const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
+  const finishPointer = (e: PointerEvent<HTMLDivElement>) => {
     if (disabled || !draggingRef.current) {
       return;
     }
@@ -115,39 +135,69 @@ function StepBrightnessSlider({
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
-    onChange(stepFromPointer(e.clientX));
+    const next = rawFromPointer(e.clientX);
+    lastEmittedRef.current = next;
+    onChange(next, true);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (disabled) {
       return;
     }
+    const step = e.shiftKey ? 1 : 5;
     let next: number | null = null;
     if (e.key === "ArrowRight" || e.key === "ArrowUp") {
-      next = Math.min(4, clamped + 1);
+      next = Math.min(safeMax, clamped + step);
     } else if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
-      next = Math.max(0, clamped - 1);
+      next = Math.max(0, clamped - step);
     } else if (e.key === "Home") {
       next = 0;
     } else if (e.key === "End") {
-      next = 4;
+      next = safeMax;
     }
     if (next !== null) {
       e.preventDefault();
-      onChange(next);
+      onChange(next, true);
     }
   };
 
+  const statusText = idleDimmed
+    ? `Dimmed (Target ${targetPct}%)`
+    : clamped === 0
+      ? "Off"
+      : `${gsdPct}% · ${clamped}/${safeMax}`;
+
   return (
-    <div className="flex w-[220px] flex-col select-none">
-      <div className="mb-2.5 text-center text-[14.5px] font-medium text-[#cbd5e1]">
-        Brightness
+    <div className="flex w-[236px] flex-col select-none">
+      <div className="mb-2.5 flex items-center justify-between">
+        <span className="text-[14.5px] font-medium text-[#cbd5e1]">
+          Brightness
+        </span>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onToggleBacklight}
+          title={
+            isOn
+              ? "Turn keyboard backlight completely OFF (cancels active sleep timer)"
+              : "Restore previous keyboard backlight brightness"
+          }
+          className={`rounded border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase transition-colors ${
+            disabled
+              ? "cursor-not-allowed border-[#1d2330] bg-[#0a0e14] text-[#4b5563]"
+              : isOn
+                ? "cursor-pointer border-[#9be000]/50 bg-[#9be000]/15 text-[#9be000] hover:bg-[#9be000]/25"
+                : "cursor-pointer border-[#2a3242] bg-[#0d1118] text-[#9ca3af] hover:border-[#3c475c] hover:text-white"
+          }`}
+        >
+          {isOn ? "ON" : "OFF"}
+        </button>
       </div>
 
-      <div className="mb-1 flex items-center justify-between text-[12px] font-medium tabular-nums text-[#e5e7eb]">
-        <span>OFF</span>
-        <span className="text-[11px] tabular-nums text-[#6b7280]">{clamped === 0 ? "Off" : `Level ${clamped}`}</span>
-        <span>4</span>
+      <div className="mb-1.5 flex items-center justify-between text-[11.5px] font-medium tabular-nums text-[#e5e7eb]">
+        <span>0%</span>
+        <span className="font-mono text-[11px] tabular-nums text-[#94a3b8]">{statusText}</span>
+        <span>100%</span>
       </div>
 
       <div
@@ -157,44 +207,44 @@ function StepBrightnessSlider({
         aria-label="Keyboard brightness"
         aria-disabled={disabled}
         aria-valuemin={0}
-        aria-valuemax={4}
+        aria-valuemax={safeMax}
         aria-valuenow={clamped}
-        aria-valuetext={clamped === 0 ? "OFF" : `Level ${clamped}`}
+        aria-valuetext={clamped === 0 ? "OFF" : `${gsdPct}% (${clamped} of ${safeMax})`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
+        onPointerUp={finishPointer}
+        onPointerCancel={finishPointer}
         onKeyDown={onKeyDown}
-        className={`relative py-2.5 touch-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#00d8ff] ${
+        className={`relative py-3 touch-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#00d8ff] ${
           disabled ? "cursor-not-allowed opacity-50" : "cursor-ew-resize"
         }`}
       >
-        {/* Base thin bar */}
-        <div className="relative h-[2px] w-full bg-[#242c39]">
+        <div className="relative h-[3px] w-full rounded-full bg-[#242c39]">
           <div
-            className="h-full bg-[#9be000] transition-[width] duration-150"
-            style={{ width: `${pct}%` }}
+            className="h-full rounded-full bg-[#9be000]"
+            style={{ width: `${pctFill}%` }}
           />
         </div>
 
-        {/* 5 discrete dot stops (OFF, 1, 2, 3, 4) */}
-        {[0, 1, 2, 3, 4].map((stop) => (
+        {/* Subtle quartile guide dots (slider glides freely at every 0..255 value) */}
+        {[0, 0.25, 0.5, 0.75, 1].map((mark) => (
           <span
-            key={stop}
+            key={mark}
             aria-hidden="true"
-            style={{ left: `${(stop / 4) * 100}%` }}
-            className={`absolute top-1.5 h-1 w-1 -translate-x-1/2 rounded-full ${
-              stop <= clamped ? "bg-[#cbd5e1]" : "bg-[#4b5563]"
+            style={{ left: `${mark * 100}%` }}
+            className={`pointer-events-none absolute top-[11px] h-1.5 w-1.5 -translate-x-1/2 rounded-full ${
+              pctFill / 100 >= mark - 0.005 ? "bg-[#9be000]/75" : "bg-[#4b5563]/65"
             }`}
           />
         ))}
 
-        {/* Reference upward marker under active stop */}
+        {/* Precision continuous thumb */}
         <span
           aria-hidden="true"
           style={{
-            left: `clamp(0px, calc(${pct}% - 4px), calc(100% - 8px))`,
+            left: `calc(${pctFill}% - 6px)`,
           }}
-          className="absolute bottom-0 h-0 w-0 border-x-[4px] border-b-[6px] border-x-transparent border-b-[#e5e7eb] transition-[left] duration-150"
+          className="pointer-events-none absolute top-1.5 h-3 w-3 rounded-full border-2 border-[#e5e7eb] bg-[#9be000] shadow-[0_0_8px_rgba(155,224,0,0.55)]"
         />
       </div>
     </div>
@@ -205,15 +255,22 @@ export function KeyboardPage() {
   const {
     keyboard,
     keyboardError,
+    monoOffsetMs,
+    draftColor,
+    draftBrightnessRaw,
     activeColor,
     activeColorHex,
-    activeStep,
+    activeBrightnessRaw,
+    activeBrightnessTarget,
+    maxBrightness,
     setColor,
-    setBrightnessStep,
+    setBrightnessRaw,
+    toggleBacklight,
     setEffect,
     setSleepTimer,
   } = useKeyboardBackend();
 
+  const sectionRef = useRef<HTMLElement | null>(null);
   const [timerDraft, setTimerDraft] = useState<{ hr: number; min: number; sec: number }>(() =>
     splitSeconds(keyboard?.sleepTimerSeconds ?? 5)
   );
@@ -223,6 +280,49 @@ export function KeyboardPage() {
       setTimerDraft(splitSeconds(keyboard.sleepTimerSeconds));
     }
   }, [keyboard?.sleepTimerSeconds]);
+
+  // Keep rAF CSS custom property evaluator phase-locked to daemon CLOCK_MONOTONIC.
+  const initialCssVars = useMemo(() => {
+    const frame = evaluateKeyboardFrame(
+      keyboard,
+      draftColor,
+      draftBrightnessRaw,
+      performance.now() + monoOffsetMs
+    );
+    return buildKeyboardCssVars(frame);
+  }, [keyboard, draftColor, draftBrightnessRaw, monoOffsetMs]);
+
+  useEffect(() => {
+    let rafId: number | null = null;
+    let active = true;
+
+    const stepFrame = () => {
+      if (!active) {
+        return;
+      }
+      const frame = evaluateKeyboardFrame(
+        keyboard,
+        draftColor,
+        draftBrightnessRaw,
+        performance.now() + monoOffsetMs
+      );
+      applyKeyboardCssVars(sectionRef.current, frame);
+      if (frame.animating) {
+        rafId = window.requestAnimationFrame(stepFrame);
+      } else {
+        rafId = null;
+      }
+    };
+
+    stepFrame();
+
+    return () => {
+      active = false;
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
+    };
+  }, [keyboard, draftColor, draftBrightnessRaw, monoOffsetMs]);
 
   const daemonConnected = keyboard?.daemonConnected ?? false;
   const available = keyboard?.available ?? false;
@@ -245,7 +345,7 @@ export function KeyboardPage() {
     };
     const handleSetColor = (e: CustomEvent<{ r: number; g: number; b: number }>) => {
       if (e.detail) {
-        void setColor([e.detail.r, e.detail.g, e.detail.b]);
+        setColor([e.detail.r, e.detail.g, e.detail.b], true);
       }
     };
     window.addEventListener("uxf-set-keyboard-effect" as any, handleSetEffect as any);
@@ -254,10 +354,12 @@ export function KeyboardPage() {
       window.removeEventListener("uxf-set-keyboard-effect" as any, handleSetEffect as any);
       window.removeEventListener("uxf-set-keyboard-color" as any, handleSetColor as any);
     };
-  }, []);
+  }, [setColor, setEffect]);
 
   return (
     <section
+      ref={sectionRef}
+      style={initialCssVars}
       aria-labelledby="led-keyboard-heading"
       className="flex h-full flex-col justify-between gap-2 overflow-y-auto bg-[#06090e] px-6 py-3 select-none"
     >
@@ -282,7 +384,7 @@ export function KeyboardPage() {
           </span>
         </div>
 
-        {/* Lighting Effect selector (only real hardware features active; Rainbow explicitly disabled) */}
+        {/* Lighting Effect selector */}
         <div className="flex items-center gap-1.5">
           <button
             type="button"
@@ -325,9 +427,9 @@ export function KeyboardPage() {
             }}
             title={
               rainbowSupported
-                ? "Cycle spectrum colors across keyboard backlight (D-Bus)"
+                ? "Smooth spectrum color cycle at current brightness (no breathing pulse)"
                 : (keyboard?.rainbowReason ??
-                  "Rainbow requires StartRainbow/GetRainbowSelected on root acer-control-daemon; 1-zone RGB hardware has no firmware EC rainbow mode")
+                  "Rainbow requires StartRainbow/GetRainbowSelected on root acer-control-daemon")
             }
             className={`rounded border px-2.5 py-1 text-[11px] font-medium transition-all duration-100 active:scale-[0.98] ${
               !available || !rainbowSupported
@@ -349,9 +451,9 @@ export function KeyboardPage() {
         </div>
       )}
 
-      {/* Middle 3-Column Control Row: Sleep Timer | Color Backlight Wheel | Brightness 0..4 */}
+      {/* Middle 3-Column Control Row: Sleep Timer | Color Backlight Wheel | Continuous Brightness 0..255 */}
       <div className="grid grid-cols-1 items-center gap-4 py-1 lg:grid-cols-[minmax(240px,1fr)_auto_minmax(220px,1fr)]">
-        {/* Left: Keyboard Sleep Timer (backed by Mutter.IdleMonitor + transient fade) */}
+        {/* Left: Daemon-Owned Keyboard Sleep Timer */}
         <div className="flex flex-col items-start gap-2.5 justify-self-center lg:justify-self-start">
           <div className="flex flex-wrap items-center gap-3.5">
             <div className="flex items-center gap-2 text-[14.5px] font-medium text-[#e5e7eb]">
@@ -470,32 +572,28 @@ export function KeyboardPage() {
           <ColorBacklightWheel
             color={activeColor}
             colorHex={activeColorHex || rgbToHex([255, 0, 0])}
-            brightnessStep={activeStep}
-            breathing={currentEffect === "breathing"}
-            dimmed={keyboard?.idleDimmed ?? false}
             disabled={!available}
-            onSelectColor={(rgb, commit) => void setColor(rgb, commit)}
+            onSelectColor={(rgb, commit) => setColor(rgb, commit)}
           />
         </div>
 
-        {/* Right: 5-Stop Brightness Slider (OFF, 1, 2, 3, 4) */}
+        {/* Right: Continuous Hardware Brightness Slider (0..255 synced with GNOME Quick Settings) */}
         <div className="flex w-full justify-center lg:justify-end">
-          <StepBrightnessSlider
-            step={activeStep}
+          <ContinuousBrightnessSlider
+            valueRaw={activeBrightnessRaw}
+            targetRaw={activeBrightnessTarget}
+            maxBrightness={maxBrightness}
+            idleDimmed={keyboard?.idleDimmed ?? false}
             disabled={!available}
-            onChange={(nextStep) => void setBrightnessStep(nextStep)}
+            onChange={(nextRaw, commit) => setBrightnessRaw(nextRaw, commit)}
+            onToggleBacklight={() => void toggleBacklight()}
           />
         </div>
       </div>
 
-      {/* Bottom Section: Full QWERTY + Numpad Visual Keyboard + Disabled Boot Lighting Checkbox */}
+      {/* Bottom Section: Visual Keyboard + Disabled Boot Lighting Checkbox */}
       <div className="flex flex-col gap-1.5">
-        <KeyboardPreview
-          color={activeColor}
-          brightnessStep={activeStep}
-          breathing={currentEffect === "breathing"}
-          dimmed={keyboard?.idleDimmed ?? false}
-        />
+        <KeyboardPreview />
 
         <div className="mx-auto flex w-full max-w-[620px] justify-end">
           <button

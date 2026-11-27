@@ -120,8 +120,11 @@ export interface KeyboardState {
   available: boolean;
   daemonConnected: boolean;
   daemonVersion: string | null;
+  daemonSupportsFullSync: boolean;
   brightnessStep: number;
   brightnessRaw: number;
+  brightnessTarget: number;
+  maxBrightness: number;
   color: [number, number, number];
   effect: KeyboardEffectMode;
   sleepTimerEnabled: boolean;
@@ -129,6 +132,12 @@ export interface KeyboardState {
   idleDimmed: boolean;
   idleStatus: string;
   idleMonitorSupported: boolean;
+  fadeFrom: number;
+  fadeTo: number;
+  fadeStartMonoMs: number;
+  fadeDurationMs: number;
+  animEpochMs: number;
+  monoNowMs: number;
   breathingSupported: boolean;
   rainbowSupported: boolean;
   rainbowReason: string | null;

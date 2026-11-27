@@ -4,22 +4,16 @@ import { listen } from "@tauri-apps/api/event";
 import type { DesktopControlsState } from "../types/system";
 
 const DESKTOP_CONTROLS_EVENT = "desktop-controls-changed";
-const THROTTLE_MS = 50;
-const OPTIMISTIC_GRACE_MS = 220;
 
-interface ThrottleSlot {
-  lastSentAt: number;
-  timerId: number | null;
+interface ControlFlightSlot {
+  inFlight: boolean;
   pendingVal: number | null;
-  optimisticUntil: number;
 }
 
-function makeSlot(): ThrottleSlot {
+function makeSlot(): ControlFlightSlot {
   return {
-    lastSentAt: 0,
-    timerId: null,
+    inFlight: false,
     pendingVal: null,
-    optimisticUntil: 0,
   };
 }
 
@@ -31,20 +25,19 @@ export function useDesktopControls() {
   const [blueLightDraft, setBlueLightDraft] = useState<number | null>(null);
   const [volumeDraft, setVolumeDraft] = useState<number | null>(null);
 
-  const brightnessSlotRef = useRef<ThrottleSlot>(makeSlot());
-  const blueLightSlotRef = useRef<ThrottleSlot>(makeSlot());
-  const volumeSlotRef = useRef<ThrottleSlot>(makeSlot());
+  const brightnessSlotRef = useRef<ControlFlightSlot>(makeSlot());
+  const blueLightSlotRef = useRef<ControlFlightSlot>(makeSlot());
+  const volumeSlotRef = useRef<ControlFlightSlot>(makeSlot());
 
   const applyServerState = useCallback((next: DesktopControlsState) => {
     setControls(next);
-    const now = performance.now();
-    if (now >= brightnessSlotRef.current.optimisticUntil) {
+    if (!brightnessSlotRef.current.inFlight && brightnessSlotRef.current.pendingVal === null) {
       setBrightnessDraft(null);
     }
-    if (now >= blueLightSlotRef.current.optimisticUntil) {
+    if (!blueLightSlotRef.current.inFlight && blueLightSlotRef.current.pendingVal === null) {
       setBlueLightDraft(null);
     }
-    if (now >= volumeSlotRef.current.optimisticUntil) {
+    if (!volumeSlotRef.current.inFlight && volumeSlotRef.current.pendingVal === null) {
       setVolumeDraft(null);
     }
   }, []);
@@ -59,7 +52,7 @@ export function useDesktopControls() {
           "get_desktop_controls_state"
         );
         if (active) {
-          setControls(initial);
+          applyServerState(initial);
           setControlsError(null);
         }
       } catch (err) {
@@ -87,80 +80,53 @@ export function useDesktopControls() {
     return () => {
       active = false;
       unlisten?.();
-      for (const slot of [
-        brightnessSlotRef.current,
-        blueLightSlotRef.current,
-        volumeSlotRef.current,
-      ]) {
-        if (slot.timerId !== null) {
-          window.clearTimeout(slot.timerId);
-        }
-      }
     };
   }, [applyServerState]);
 
-  const dispatchThrottled = useCallback(
+  const dispatchSingleFlight = useCallback(
     (
-      slot: ThrottleSlot,
+      slot: ControlFlightSlot,
       value: number,
-      commit: boolean,
       setDraft: (v: number | null) => void,
       sender: (v: number) => Promise<DesktopControlsState>
     ) => {
-      const now = performance.now();
-      slot.optimisticUntil = now + OPTIMISTIC_GRACE_MS;
       setDraft(value);
 
       const sendValue = async (target: number) => {
-        slot.lastSentAt = performance.now();
+        slot.inFlight = true;
         try {
           const updated = await sender(target);
           setControls(updated);
           setControlsError(null);
-          if (commit || slot.pendingVal === null) {
-            slot.optimisticUntil = 0;
-            setDraft(null);
-          }
         } catch (err) {
           setControlsError(err instanceof Error ? err.message : String(err));
-          slot.optimisticUntil = 0;
-          setDraft(null);
+        } finally {
+          slot.inFlight = false;
+          const queued = slot.pendingVal;
+          slot.pendingVal = null;
+          if (queued !== null) {
+            void sendValue(queued);
+          } else {
+            setDraft(null);
+          }
         }
       };
 
-      const elapsed = now - slot.lastSentAt;
-      if (commit || elapsed >= THROTTLE_MS) {
-        if (slot.timerId !== null) {
-          window.clearTimeout(slot.timerId);
-          slot.timerId = null;
-        }
-        slot.pendingVal = null;
-        void sendValue(value);
-      } else {
+      if (slot.inFlight) {
         slot.pendingVal = value;
-        if (slot.timerId === null) {
-          const remaining = Math.max(0, THROTTLE_MS - elapsed);
-          slot.timerId = window.setTimeout(() => {
-            slot.timerId = null;
-            const queued = slot.pendingVal;
-            slot.pendingVal = null;
-            if (queued !== null) {
-              void sendValue(queued);
-            }
-          }, remaining);
-        }
+      } else {
+        void sendValue(value);
       }
     },
     []
   );
 
   const setBrightnessPercent = useCallback(
-    (percent: number, commit = false) => {
+    (percent: number, _commit = false) => {
       const clamped = Math.max(0, Math.min(100, Math.round(percent)));
-      dispatchThrottled(
+      dispatchSingleFlight(
         brightnessSlotRef.current,
         clamped,
-        commit,
         setBrightnessDraft,
         (val) =>
           invoke<DesktopControlsState>("set_screen_brightness", {
@@ -168,38 +134,36 @@ export function useDesktopControls() {
           })
       );
     },
-    [dispatchThrottled]
+    [dispatchSingleFlight]
   );
 
   const setBlueLightLevel = useCallback(
-    (level: number, commit = false) => {
+    (level: number, _commit = false) => {
       const clamped =
         Math.round(Math.max(0, Math.min(10, level)) * 100) / 100;
-      dispatchThrottled(
+      dispatchSingleFlight(
         blueLightSlotRef.current,
         clamped,
-        commit,
         setBlueLightDraft,
         (val) =>
           invoke<DesktopControlsState>("set_blue_light_filter", { level: val })
       );
     },
-    [dispatchThrottled]
+    [dispatchSingleFlight]
   );
 
   const setVolumePercent = useCallback(
-    (percent: number, commit = false) => {
+    (percent: number, _commit = false) => {
       const clamped = Math.max(0, Math.min(100, Math.round(percent)));
-      dispatchThrottled(
+      dispatchSingleFlight(
         volumeSlotRef.current,
         clamped,
-        commit,
         setVolumeDraft,
         (val) =>
           invoke<DesktopControlsState>("set_system_volume", { percent: val })
       );
     },
-    [dispatchThrottled]
+    [dispatchSingleFlight]
   );
 
   return {

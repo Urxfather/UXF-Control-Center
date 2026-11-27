@@ -6,21 +6,29 @@ mod health;
 mod health_test;
 mod keyboard;
 mod preferences;
+mod system_center;
+mod system_info;
 mod telemetry;
 
+use std::process::Command;
 use std::sync::Arc;
 use tauri::State;
 
 use dbus::{AcerControlDBus, FanStatus};
 use desktop_controls::{DesktopControlsManager, DesktopControlsState};
-use health::{check_app_update, check_system_health, detect_installed_version, SystemHealthReport, UpdateCheckResult};
+use health::{SystemHealthReport, UpdateCheckResult};
 use keyboard::{KeyboardManager, KeyboardState};
 use preferences::{PreferencesManager, PreferencesState};
+use system_center::{
+    CachedHealthEnvelope, CachedUpdatesEnvelope, SystemCenterManager,
+    SystemCenterOverviewSnapshot,
+};
+use system_info::SystemInformationReport;
 use telemetry::{SystemIdentity, TelemetryCollector, TelemetrySnapshot};
 
 #[tauri::command]
-fn get_app_version() -> String {
-    detect_installed_version()
+async fn get_app_version(sc: State<'_, Arc<SystemCenterManager>>) -> Result<String, String> {
+    Ok(sc.installed_version())
 }
 
 #[tauri::command]
@@ -37,23 +45,110 @@ fn report_capture_step(step: String) {
 }
 
 #[tauri::command]
-fn get_system_health() -> SystemHealthReport {
-    check_system_health()
+async fn get_system_health(
+    sc: State<'_, Arc<SystemCenterManager>>,
+) -> Result<SystemHealthReport, String> {
+    let mgr = Arc::clone(sc.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        mgr.get_or_refresh_health(true)
+            .report
+            .ok_or_else(|| "System health report unavailable".to_string())
+    })
+    .await
+    .map_err(|e| format!("System health task failed: {e}"))?
 }
 
 #[tauri::command]
-fn check_updates(current_version: String) -> UpdateCheckResult {
-    check_app_update(&current_version)
+async fn get_system_health_cached(
+    sc: State<'_, Arc<SystemCenterManager>>,
+) -> Result<CachedHealthEnvelope, String> {
+    Ok(sc.peek_health())
 }
 
 #[tauri::command]
-fn get_system_identity(collector: State<'_, TelemetryCollector>) -> SystemIdentity {
-    collector.identity()
+async fn refresh_system_health(
+    force: Option<bool>,
+    sc: State<'_, Arc<SystemCenterManager>>,
+) -> Result<CachedHealthEnvelope, String> {
+    let mgr = Arc::clone(sc.inner());
+    let force_run = force.unwrap_or(true);
+    tauri::async_runtime::spawn_blocking(move || mgr.get_or_refresh_health(force_run))
+        .await
+        .map_err(|e| format!("Refresh health task failed: {e}"))
 }
 
 #[tauri::command]
-fn get_telemetry_snapshot(collector: State<'_, TelemetryCollector>) -> TelemetrySnapshot {
-    collector.snapshot()
+async fn get_system_center_overview(
+    sc: State<'_, Arc<SystemCenterManager>>,
+) -> Result<SystemCenterOverviewSnapshot, String> {
+    let mgr = Arc::clone(sc.inner());
+    tauri::async_runtime::spawn_blocking(move || mgr.get_overview_snapshot())
+        .await
+        .map_err(|e| format!("Overview snapshot task failed: {e}"))
+}
+
+#[tauri::command]
+async fn get_updates_cached(
+    sc: State<'_, Arc<SystemCenterManager>>,
+) -> Result<CachedUpdatesEnvelope, String> {
+    Ok(sc.peek_updates())
+}
+
+#[tauri::command]
+async fn check_updates(
+    current_version: String,
+    force: Option<bool>,
+    sc: State<'_, Arc<SystemCenterManager>>,
+) -> Result<UpdateCheckResult, String> {
+    let mgr = Arc::clone(sc.inner());
+    let force_run = force.unwrap_or(false);
+    tauri::async_runtime::spawn_blocking(move || mgr.check_updates_dedup(&current_version, force_run))
+        .await
+        .map_err(|e| format!("Update check task failed: {e}"))
+}
+
+#[tauri::command]
+async fn get_system_information(
+    force: Option<bool>,
+    sc: State<'_, Arc<SystemCenterManager>>,
+    collector: State<'_, TelemetryCollector>,
+) -> Result<SystemInformationReport, String> {
+    let mgr = Arc::clone(sc.inner());
+    let identity = collector.identity();
+    let force_run = force.unwrap_or(false);
+    tauri::async_runtime::spawn_blocking(move || mgr.get_system_information(&identity, force_run))
+        .await
+        .map_err(|e| format!("System information task failed: {e}"))
+}
+
+#[tauri::command]
+async fn open_external_url(url: String) -> Result<(), String> {
+    let trimmed = url.trim().to_string();
+    const ALLOWED_PREFIX: &str = "https://github.com/Urxfather/UXF-Control-Center";
+    if !trimmed.starts_with(ALLOWED_PREFIX) {
+        return Err("Blocked URL outside approved repository scope".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        Command::new("xdg-open")
+            .arg(&trimmed)
+            .spawn()
+            .map_err(|e| format!("Failed to open browser: {e}"))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Open URL task failed: {e}"))?
+}
+
+#[tauri::command]
+async fn get_system_identity(collector: State<'_, TelemetryCollector>) -> Result<SystemIdentity, String> {
+    Ok(collector.identity())
+}
+
+#[tauri::command]
+async fn get_telemetry_snapshot(
+    collector: State<'_, TelemetryCollector>,
+) -> Result<TelemetrySnapshot, String> {
+    Ok(collector.snapshot())
 }
 
 #[tauri::command]
@@ -67,12 +162,17 @@ async fn get_fan_status() -> FanStatus {
 }
 
 #[tauri::command]
-async fn set_fan_mode(mode: String) -> Result<FanStatus, String> {
+async fn set_fan_mode(
+    mode: String,
+    sc: State<'_, Arc<SystemCenterManager>>,
+) -> Result<FanStatus, String> {
     let normalized = mode.trim().to_ascii_lowercase();
     if normalized != "auto" && normalized != "max" {
         return Err(format!("Unsupported fan mode requested: {mode}"));
     }
 
+    let mgr = Arc::clone(sc.inner());
+    let mode_label = normalized.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let client = AcerControlDBus::new()?;
         match normalized.as_str() {
@@ -86,6 +186,15 @@ async fn set_fan_mode(mode: String) -> Result<FanStatus, String> {
                 .error
                 .unwrap_or_else(|| "Daemon failed to confirm fan mode".into()));
         }
+        mgr.record_activity(
+            "fan",
+            format!(
+                "Cooling fan mode switched to {}",
+                if mode_label == "max" { "Maximum" } else { "Auto" }
+            ),
+            "acer-control-daemon",
+            "info",
+        );
         Ok(status)
     })
     .await
@@ -146,6 +255,63 @@ async fn get_keyboard_state(
 }
 
 #[tauri::command]
+async fn set_keyboard_brightness(
+    raw: u8,
+    commit: Option<bool>,
+    keyboard: State<'_, Arc<KeyboardManager>>,
+    sc: State<'_, Arc<SystemCenterManager>>,
+) -> Result<KeyboardState, String> {
+    let mgr = Arc::clone(keyboard.inner());
+    let sc_mgr = Arc::clone(sc.inner());
+    let do_commit = commit.unwrap_or(true);
+    let res = tauri::async_runtime::spawn_blocking(move || mgr.set_brightness_raw(raw, do_commit))
+        .await
+        .map_err(|e| format!("Set keyboard brightness task failed: {e}"))??;
+    if do_commit {
+        sc_mgr.record_activity(
+            "kbd-bright",
+            if raw == 0 {
+                "Keyboard backlight turned OFF".into()
+            } else {
+                format!(
+                    "Keyboard backlight brightness set to {}/{}",
+                    raw, res.max_brightness
+                )
+            },
+            "acer-control-daemon",
+            "info",
+        );
+    }
+    Ok(res)
+}
+
+#[tauri::command]
+async fn toggle_keyboard_backlight(
+    keyboard: State<'_, Arc<KeyboardManager>>,
+    sc: State<'_, Arc<SystemCenterManager>>,
+) -> Result<KeyboardState, String> {
+    let mgr = Arc::clone(keyboard.inner());
+    let sc_mgr = Arc::clone(sc.inner());
+    let res = tauri::async_runtime::spawn_blocking(move || mgr.toggle_backlight())
+        .await
+        .map_err(|e| format!("Toggle keyboard backlight task failed: {e}"))??;
+    sc_mgr.record_activity(
+        "kbd-bright",
+        if res.brightness_target == 0 {
+            "Keyboard backlight turned OFF".into()
+        } else {
+            format!(
+                "Keyboard backlight turned ON ({}/{})",
+                res.brightness_target, res.max_brightness
+            )
+        },
+        "acer-control-daemon",
+        "info",
+    );
+    Ok(res)
+}
+
+#[tauri::command]
 async fn set_keyboard_brightness_step(
     step: u8,
     keyboard: State<'_, Arc<KeyboardManager>>,
@@ -161,10 +327,11 @@ async fn set_keyboard_color(
     r: u8,
     g: u8,
     b: u8,
+    commit: Option<bool>,
     keyboard: State<'_, Arc<KeyboardManager>>,
 ) -> Result<KeyboardState, String> {
     let mgr = Arc::clone(keyboard.inner());
-    tauri::async_runtime::spawn_blocking(move || mgr.set_color(r, g, b))
+    tauri::async_runtime::spawn_blocking(move || mgr.set_color(r, g, b, commit))
         .await
         .map_err(|e| format!("Set keyboard color task failed: {e}"))?
 }
@@ -173,11 +340,21 @@ async fn set_keyboard_color(
 async fn set_keyboard_effect(
     effect: String,
     keyboard: State<'_, Arc<KeyboardManager>>,
+    sc: State<'_, Arc<SystemCenterManager>>,
 ) -> Result<KeyboardState, String> {
     let mgr = Arc::clone(keyboard.inner());
-    tauri::async_runtime::spawn_blocking(move || mgr.set_effect(&effect))
+    let sc_mgr = Arc::clone(sc.inner());
+    let eff_label = effect.clone();
+    let res = tauri::async_runtime::spawn_blocking(move || mgr.set_effect(&effect))
         .await
-        .map_err(|e| format!("Set keyboard effect task failed: {e}"))?
+        .map_err(|e| format!("Set keyboard effect task failed: {e}"))??;
+    sc_mgr.record_activity(
+        "kbd",
+        format!("Keyboard RGB lighting effect set to {eff_label}"),
+        "acer-control-daemon",
+        "info",
+    );
+    Ok(res)
 }
 
 #[tauri::command]
@@ -228,23 +405,29 @@ async fn toggle_preference(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let collector = TelemetryCollector::new();
-    let controls = DesktopControlsManager::new();
+    let collector_identity = collector.identity_handle();
+    let controls = DesktopControlsManager::new_deferred();
     let controls_for_setup = Arc::clone(&controls);
     let keyboard = KeyboardManager::new();
     let keyboard_for_setup = Arc::clone(&keyboard);
     let preferences = Arc::new(PreferencesManager::new());
     let preferences_for_setup = Arc::clone(&preferences);
+    let system_center = SystemCenterManager::new();
+    let system_center_for_setup = Arc::clone(&system_center);
 
     tauri::Builder::default()
         .manage(collector)
         .manage(controls)
         .manage(keyboard)
         .manage(preferences)
+        .manage(system_center)
         .setup(move |app| {
             let handle = app.handle().clone();
             controls_for_setup.start_event_watchers(handle.clone());
-            keyboard_for_setup.bind_app(handle.clone());
-            preferences_for_setup.start_watchers(handle);
+            keyboard_for_setup.start_watchers(handle.clone());
+            preferences_for_setup.start_watchers(handle.clone());
+            system_center_for_setup.bind_app(handle);
+            system_center_for_setup.start_warmup(collector_identity);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -252,7 +435,13 @@ pub fn run() {
             report_capture_step,
             get_app_version,
             get_system_health,
+            get_system_health_cached,
+            refresh_system_health,
+            get_system_center_overview,
+            get_updates_cached,
             check_updates,
+            get_system_information,
+            open_external_url,
             get_system_identity,
             get_telemetry_snapshot,
             get_fan_status,
@@ -262,6 +451,8 @@ pub fn run() {
             set_blue_light_filter,
             set_system_volume,
             get_keyboard_state,
+            set_keyboard_brightness,
+            toggle_keyboard_backlight,
             set_keyboard_brightness_step,
             set_keyboard_color,
             set_keyboard_effect,

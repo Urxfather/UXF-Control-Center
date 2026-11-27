@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { type MouseEvent } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { AboutModal } from "./AboutModal";
 import {
   CloseIcon,
-  InfoIcon,
   MaximizeIcon,
   MenuIcon,
   MinimizeIcon,
@@ -13,27 +11,14 @@ import {
 interface AppHeaderProps {
   sidebarCollapsed: boolean;
   isMaximized: boolean;
-  appVersion: string;
   onToggleSidebar: () => void;
 }
 
 export function AppHeader({
   sidebarCollapsed,
   isMaximized,
-  appVersion,
   onToggleSidebar,
 }: AppHeaderProps) {
-  const [modalOpen, setModalOpen] = useState(false);
-  const infoWrapRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const handleSetModal = (e: CustomEvent<boolean>) => {
-      setModalOpen(e.detail);
-    };
-    window.addEventListener("uxf-set-modal-open" as any, handleSetModal as any);
-    return () => window.removeEventListener("uxf-set-modal-open" as any, handleSetModal as any);
-  }, []);
-
   const stopDragPropagation = (event: MouseEvent<HTMLElement>) => {
     event.stopPropagation();
   };
@@ -99,33 +84,8 @@ export function AppHeader({
         </h1>
       </div>
 
-      {/* Right Reference Utility & Window Controls: [i] (+ Popover)  [Min] [Max/Restore] [Close] */}
+      {/* Right Window Controls: [Min] [Max/Restore] [Close] */}
       <div className="flex h-full shrink-0 items-center gap-1 pr-2 pt-0.5">
-        <div ref={infoWrapRef} className="relative mr-2 flex items-center">
-          <button
-            type="button"
-            onMouseDown={stopDragPropagation}
-            onClick={() => setModalOpen(true)}
-            aria-label="Application information & health"
-            aria-expanded={modalOpen}
-            aria-haspopup="dialog"
-            title="System Health, Updates & Info"
-            className={`flex h-7 w-7 items-center justify-center rounded border transition-all duration-100 active:scale-[0.98] focus:outline-none focus-visible:ring-1 focus-visible:ring-[#00d8ff] ${
-              modalOpen
-                ? "border-[#262b36] bg-[#171c25] text-[#00d8ff]"
-                : "border-transparent text-slate-300 hover:border-[#262b36] hover:bg-[#171c25] hover:text-[#00d8ff]"
-            }`}
-          >
-            <InfoIcon className="h-4 w-4" />
-          </button>
-        </div>
-
-        <AboutModal
-          open={modalOpen}
-          appVersion={appVersion}
-          onClose={() => setModalOpen(false)}
-        />
-
         <button
           type="button"
           onMouseDown={stopDragPropagation}

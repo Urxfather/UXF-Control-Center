@@ -42,6 +42,26 @@ export function InfoIcon({ className = "h-4 w-4" }: IconProps) {
   );
 }
 
+/** Selected Option B sidebar icon: crisp circular Information emblem */
+export function SystemCenterInfoIcon({ className = "h-6 w-6" }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9.25" />
+      <circle cx="12" cy="8.15" r="1.05" fill="currentColor" stroke="none" />
+      <path d="M12 11.2v5.1" />
+    </svg>
+  );
+}
+
 export function MinimizeIcon({ className = "h-3.5 w-3.5" }: IconProps) {
   return (
     <svg

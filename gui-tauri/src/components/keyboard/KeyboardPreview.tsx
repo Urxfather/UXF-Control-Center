@@ -8,7 +8,6 @@ interface KeyCapDef {
   icon?: "backspace" | "enter" | "menu" | "up" | "down" | "left" | "right";
 }
 
-// Reference top function row (16 compact keys flush across 15u main block width)
 const MAIN_FN_ROW: readonly KeyCapDef[] = [
   { label: "Esc" },
   { label: "F1" },
@@ -35,7 +34,6 @@ const NUMPAD_FN_ROW: readonly KeyCapDef[] = [
   { label: "PgDn" },
 ];
 
-// Rows 2-6 of Main Block matching exact reference key arrangement (sum = 15.0 per row)
 const MAIN_BODY_ROWS: readonly (readonly KeyCapDef[])[] = [
   [
     { label: "`", secondary: "~", span: 1 },
@@ -120,13 +118,6 @@ const NUMPAD_ROW_2: readonly KeyCapDef[] = [
   { label: "-" },
 ];
 
-export interface KeyboardPreviewProps {
-  color: [number, number, number];
-  brightnessStep: number;
-  breathing?: boolean;
-  dimmed?: boolean;
-}
-
 function renderKeyIcon(icon: KeyCapDef["icon"]) {
   switch (icon) {
     case "backspace":
@@ -161,134 +152,87 @@ function renderKeyIcon(icon: KeyCapDef["icon"]) {
   }
 }
 
-export function KeyboardPreview({
-  color,
-  brightnessStep,
-  breathing = false,
-  dimmed = false,
-}: KeyboardPreviewProps) {
-  const [r, g, b] = color;
-  const clampedStep = dimmed ? 0 : Math.max(0, Math.min(4, brightnessStep));
-  const isLit = clampedStep > 0;
-  const levelFactor = [0, 0.34, 0.56, 0.78, 1.0][clampedStep];
+const KEYCAP_VAR_STYLE: CSSProperties = {
+  borderColor: "var(--uxf-kbd-border, rgba(55, 65, 81, 0.48))",
+  color: "var(--uxf-kbd-text, rgba(107, 114, 128, 0.68))",
+  background:
+    "var(--uxf-kbd-key-bg, linear-gradient(180deg, rgba(16, 20, 27, 0.96) 0%, rgba(10, 12, 17, 0.98) 100%))",
+  boxShadow: "var(--uxf-kbd-key-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.03))",
+};
 
-  const glowBorderAlpha = isLit ? 0.24 + levelFactor * 0.62 : 0.16;
-  const glowTextAlpha = isLit ? 0.45 + levelFactor * 0.52 : 0.36;
-  const glowHaloAlpha = isLit ? 0.12 + levelFactor * 0.44 : 0;
-  const glowFillAlpha = isLit ? 0.04 + levelFactor * 0.22 : 0;
+function renderKeyContent(key: KeyCapDef, compactFn = false) {
+  if (key.icon) {
+    return renderKeyIcon(key.icon);
+  }
+  if (key.secondary) {
+    return (
+      <span className="flex flex-col items-center justify-center leading-[1.05]">
+        <span className="text-[7px] opacity-85">{key.secondary}</span>
+        <span className="text-[8.5px]">{key.label}</span>
+      </span>
+    );
+  }
+  const textClass = compactFn
+    ? "text-[7px] font-medium tracking-tight"
+    : key.label === "SUP"
+      ? "text-[7.5px] font-semibold tracking-tight"
+      : key.label.length > 3
+        ? "text-[7.5px] font-medium tracking-tight"
+        : "text-[9px] font-medium";
+  return <span className={textClass}>{key.label}</span>;
+}
 
-  const capGlowStyle: CSSProperties = {
-    borderColor: isLit
-      ? `rgba(${r}, ${g}, ${b}, ${glowBorderAlpha.toFixed(3)})`
-      : "rgba(55, 65, 81, 0.48)",
-    color: isLit
-      ? `rgba(${r}, ${g}, ${b}, ${glowTextAlpha.toFixed(3)})`
-      : "rgba(107, 114, 128, 0.68)",
-    background: isLit
-      ? `radial-gradient(ellipse at center, rgba(${r}, ${g}, ${b}, ${(
-          glowFillAlpha * 0.45
-        ).toFixed(3)}) 0%, rgba(10, 13, 18, 0.96) 80%)`
-      : "linear-gradient(180deg, rgba(16, 20, 27, 0.96) 0%, rgba(10, 12, 17, 0.98) 100%)",
-    boxShadow: isLit
-      ? `0 0 ${Math.round(4 + levelFactor * 7)}px rgba(${r}, ${g}, ${b}, ${(
-          glowHaloAlpha * 0.62
-        ).toFixed(3)}), inset 0 0 ${Math.round(3 + levelFactor * 5)}px rgba(${r}, ${g}, ${b}, ${(
-          glowFillAlpha * 0.7
-        ).toFixed(3)})`
-      : "inset 0 1px 0 rgba(255, 255, 255, 0.03)",
-  };
+const KEY_BASE_CLASS =
+  "relative flex select-none items-center overflow-hidden rounded-[2.5px] border";
 
-  const renderKeyContent = (key: KeyCapDef, compactFn = false) => {
-    if (key.icon) {
-      return renderKeyIcon(key.icon);
-    }
-    if (key.secondary) {
-      return (
-        <span className="flex flex-col items-center justify-center leading-[1.05]">
-          <span className="text-[7px] opacity-85">{key.secondary}</span>
-          <span className="text-[8.5px]">{key.label}</span>
-        </span>
-      );
-    }
-    const textClass = compactFn
-      ? "text-[7px] font-medium tracking-tight"
-      : key.label === "SUP"
-        ? "text-[7.5px] font-semibold tracking-tight"
-        : key.label.length > 3
-          ? "text-[7.5px] font-medium tracking-tight"
-          : "text-[9px] font-medium";
-    return <span className={textClass}>{key.label}</span>;
-  };
-
-  const keyBaseClass =
-    "relative flex select-none items-center justify-center overflow-hidden rounded-[2.5px] border transition-colors duration-150";
-
-  const renderStaticOrGlowingKey = (
-    keyId: string,
-    key: KeyCapDef,
-    extraClass: string,
-    style?: CSSProperties,
-    compactFn = false
-  ) => (
+function renderKey(
+  keyId: string,
+  key: KeyCapDef,
+  extraClass: string,
+  style?: CSSProperties,
+  compactFn = false
+) {
+  return (
     <div
       key={keyId}
       style={{
+        ...KEYCAP_VAR_STYLE,
         ...style,
-        ...(!isLit ? capGlowStyle : {
-          borderColor: "rgba(55, 65, 81, 0.36)",
-          color: "rgba(107, 114, 128, 0.55)",
-          background: "linear-gradient(180deg, rgba(16, 20, 27, 0.96) 0%, rgba(10, 12, 17, 0.98) 100%)",
-        }),
       }}
-      className={`${keyBaseClass} ${
+      className={`${KEY_BASE_CLASS} ${
         key.alignLeft ? "justify-start px-1.5" : "justify-center px-0.5"
       } ${extraClass}`}
     >
-      {isLit && (
-        <span
-          aria-hidden="true"
-          style={capGlowStyle}
-          className={`pointer-events-none absolute inset-0 flex items-center rounded-[2.5px] border ${
-            key.alignLeft ? "justify-start px-1.5" : "justify-center px-0.5"
-          } ${breathing ? "uxf-kbd-breathing-layer" : ""}`}
-        >
-          {renderKeyContent(key, compactFn)}
-        </span>
-      )}
-      {!isLit && renderKeyContent(key, compactFn)}
+      {renderKeyContent(key, compactFn)}
     </div>
   );
+}
 
+/**
+ * Full laptop keyboard preview styled phase-accurately from daemon CSS variables.
+ */
+export function KeyboardPreview() {
   return (
     <div
       aria-label="Visual backlit laptop keyboard preview"
-      className="relative mx-auto w-full max-w-[620px] overflow-hidden rounded-[5px] border border-[#1a202b] bg-[#06080c] p-2 shadow-[0_10px_28px_rgba(0,0,0,0.65)]"
-      style={
-        isLit
-          ? {
-              boxShadow: `0 0 ${Math.round(14 + levelFactor * 16)}px rgba(${r}, ${g}, ${b}, ${(
-                0.08 +
-                levelFactor * 0.22
-              ).toFixed(3)}), 0 10px 28px rgba(0, 0, 0, 0.72)`,
-            }
-          : undefined
-      }
+      className="relative mx-auto w-full max-w-[620px] overflow-hidden rounded-[5px] border border-[#1a202b] bg-[#06080c] p-2"
+      style={{
+        boxShadow: "var(--uxf-kbd-wrap-shadow, 0 10px 28px rgba(0, 0, 0, 0.65))",
+      }}
     >
       <div className="flex items-stretch gap-1.5">
         {/* Left Main Block (~15u proportional width) */}
         <div className="flex flex-[15] flex-col gap-[3px]">
-          {/* Row 1: Compact Fn row (16 flush columns) */}
           <div className="grid grid-cols-16 gap-[3px]">
             {MAIN_FN_ROW.map((k, idx) =>
-              renderStaticOrGlowingKey(`mfn-${idx}`, k, "h-[19px]", undefined, true)
+              renderKey(`mfn-${idx}`, k, "h-[19px]", undefined, true)
             )}
           </div>
 
-          {/* Rows 2-6: Exact staggered proportional widths summing to 15.0 per row */}
           {MAIN_BODY_ROWS.map((row, rIdx) => (
             <div key={`mrow-${rIdx}`} className="flex gap-[3px]">
               {row.map((k, cIdx) =>
-                renderStaticOrGlowingKey(
+                renderKey(
                   `m-${rIdx}-${cIdx}`,
                   k,
                   "h-[31px] min-w-0",
@@ -301,40 +245,36 @@ export function KeyboardPreview({
 
         {/* Right Numpad Block (~4u proportional width) */}
         <div className="flex flex-[4] flex-col gap-[3px]">
-          {/* Row 1: Home / End / PgUp / PgDn matching Fn row height */}
           <div className="grid grid-cols-4 gap-[3px]">
             {NUMPAD_FN_ROW.map((k, idx) =>
-              renderStaticOrGlowingKey(`nfn-${idx}`, k, "h-[19px]", undefined, true)
+              renderKey(`nfn-${idx}`, k, "h-[19px]", undefined, true)
             )}
           </div>
 
-          {/* Row 2: NumLk / * - */}
           <div className="grid grid-cols-4 gap-[3px]">
             {NUMPAD_ROW_2.map((k, idx) =>
-              renderStaticOrGlowingKey(`nr2-${idx}`, k, "h-[31px]")
+              renderKey(`nr2-${idx}`, k, "h-[31px]")
             )}
           </div>
 
-          {/* Rows 3-4: 7 8 9 / 4 5 6 + 2-row tall '+' */}
           <div className="grid grid-cols-4 grid-rows-2 gap-[3px] h-[65px]">
-            {renderStaticOrGlowingKey("n-7", { label: "7" }, "h-full")}
-            {renderStaticOrGlowingKey("n-8", { label: "8" }, "h-full")}
-            {renderStaticOrGlowingKey("n-9", { label: "9" }, "h-full")}
-            {renderStaticOrGlowingKey("n-plus", { label: "+" }, "row-span-2 h-full")}
-            {renderStaticOrGlowingKey("n-4", { label: "4" }, "h-full")}
-            {renderStaticOrGlowingKey("n-5", { label: "5" }, "h-full")}
-            {renderStaticOrGlowingKey("n-6", { label: "6" }, "h-full")}
+            {renderKey("n-7", { label: "7" }, "h-full")}
+            {renderKey("n-8", { label: "8" }, "h-full")}
+            {renderKey("n-9", { label: "9" }, "h-full")}
+            {renderKey("n-plus", { label: "+" }, "row-span-2 h-full")}
+            {renderKey("n-4", { label: "4" }, "h-full")}
+            {renderKey("n-5", { label: "5" }, "h-full")}
+            {renderKey("n-6", { label: "6" }, "h-full")}
           </div>
 
-          {/* Rows 5-6: 1 2 3 / → 0 . + 2-row tall 'Enter' */}
           <div className="grid grid-cols-4 grid-rows-2 gap-[3px] h-[65px]">
-            {renderStaticOrGlowingKey("n-1", { label: "1" }, "h-full")}
-            {renderStaticOrGlowingKey("n-2", { label: "2" }, "h-full")}
-            {renderStaticOrGlowingKey("n-3", { label: "3" }, "h-full")}
-            {renderStaticOrGlowingKey("n-ent", { label: "Enter" }, "row-span-2 h-full")}
-            {renderStaticOrGlowingKey("n-right", { label: "→", icon: "right" }, "h-full")}
-            {renderStaticOrGlowingKey("n-0", { label: "0" }, "h-full")}
-            {renderStaticOrGlowingKey("n-dot", { label: "." }, "h-full")}
+            {renderKey("n-1", { label: "1" }, "h-full")}
+            {renderKey("n-2", { label: "2" }, "h-full")}
+            {renderKey("n-3", { label: "3" }, "h-full")}
+            {renderKey("n-ent", { label: "Enter" }, "row-span-2 h-full")}
+            {renderKey("n-right", { label: "→", icon: "right" }, "h-full")}
+            {renderKey("n-0", { label: "0" }, "h-full")}
+            {renderKey("n-dot", { label: "." }, "h-full")}
           </div>
         </div>
       </div>

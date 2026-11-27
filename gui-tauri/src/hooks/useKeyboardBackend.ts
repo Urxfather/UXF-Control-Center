@@ -4,8 +4,6 @@ import { listen } from "@tauri-apps/api/event";
 import type { KeyboardEffectMode, KeyboardState } from "../types/system";
 
 const KEYBOARD_EVENT = "keyboard-state-changed";
-const COLOR_THROTTLE_MS = 60;
-const GRACE_MS = 240;
 
 export function rgbToHex([r, g, b]: readonly [number, number, number]): string {
   return (
@@ -30,25 +28,43 @@ export function hexToRgb(hex: string): [number, number, number] {
   return [r, g, b];
 }
 
-interface ColorSlot {
-  lastSentAt: number;
-  timerId: number | null;
-  pending: [number, number, number] | null;
-  optimisticUntil: number;
+interface SingleFlightQueue<T> {
+  inFlight: boolean;
+  pending: { value: T; commit: boolean } | null;
+}
+
+function makeQueue<T>(): SingleFlightQueue<T> {
+  return { inFlight: false, pending: null };
 }
 
 export function useKeyboardBackend() {
   const [keyboard, setKeyboard] = useState<KeyboardState | null>(null);
   const [keyboardError, setKeyboardError] = useState<string | null>(null);
   const [draftColor, setDraftColor] = useState<[number, number, number] | null>(null);
-  const [draftStep, setDraftStep] = useState<number | null>(null);
+  const [draftBrightnessRaw, setDraftBrightnessRaw] = useState<number | null>(null);
+  const [monoOffsetMs, setMonoOffsetMs] = useState<number>(0);
 
-  const colorSlotRef = useRef<ColorSlot>({
-    lastSentAt: 0,
-    timerId: null,
-    pending: null,
-    optimisticUntil: 0,
-  });
+  const colorQueueRef = useRef(makeQueue<[number, number, number]>());
+  const brightnessQueueRef = useRef(makeQueue<number>());
+  const maxBrightnessRef = useRef<number>(255);
+
+  const acceptServerState = useCallback((next: KeyboardState) => {
+    if (next.monoNowMs > 0) {
+      setMonoOffsetMs(next.monoNowMs - performance.now());
+    }
+    if (next.maxBrightness > 0) {
+      maxBrightnessRef.current = next.maxBrightness;
+    }
+    setKeyboard(next);
+    setKeyboardError(next.error);
+
+    if (!colorQueueRef.current.inFlight && !colorQueueRef.current.pending) {
+      setDraftColor(null);
+    }
+    if (!brightnessQueueRef.current.inFlight && !brightnessQueueRef.current.pending) {
+      setDraftBrightnessRaw(null);
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -58,8 +74,7 @@ export function useKeyboardBackend() {
       try {
         const snap = await invoke<KeyboardState>("get_keyboard_state");
         if (active) {
-          setKeyboard(snap);
-          setKeyboardError(snap.error);
+          acceptServerState(snap);
         }
       } catch (err) {
         if (active) {
@@ -69,12 +84,8 @@ export function useKeyboardBackend() {
 
       try {
         unlisten = await listen<KeyboardState>(KEYBOARD_EVENT, (event) => {
-          if (!active || !event.payload) {
-            return;
-          }
-          setKeyboard(event.payload);
-          if (performance.now() >= colorSlotRef.current.optimisticUntil) {
-            setDraftColor(null);
+          if (active && event.payload) {
+            acceptServerState(event.payload);
           }
         });
       } catch {
@@ -87,11 +98,8 @@ export function useKeyboardBackend() {
     return () => {
       active = false;
       unlisten?.();
-      if (colorSlotRef.current.timerId !== null) {
-        window.clearTimeout(colorSlotRef.current.timerId);
-      }
     };
-  }, []);
+  }, [acceptServerState]);
 
   const setColor = useCallback(
     (rgb: [number, number, number], commit = true) => {
@@ -100,109 +108,156 @@ export function useKeyboardBackend() {
         Math.max(0, Math.min(255, Math.round(rgb[1]))),
         Math.max(0, Math.min(255, Math.round(rgb[2]))),
       ];
-      const slot = colorSlotRef.current;
-      const now = performance.now();
-      slot.optimisticUntil = now + GRACE_MS;
       setDraftColor(clamped);
 
-      const send = async (target: [number, number, number]) => {
-        slot.lastSentAt = performance.now();
+      const queue = colorQueueRef.current;
+      const runNext = async (target: [number, number, number], isCommit: boolean) => {
+        queue.inFlight = true;
         try {
           const next = await invoke<KeyboardState>("set_keyboard_color", {
             r: target[0],
             g: target[1],
             b: target[2],
+            commit: isCommit,
           });
-          setKeyboard(next);
-          setKeyboardError(next.error);
-          if (commit || slot.pending === null) {
-            slot.optimisticUntil = 0;
-            setDraftColor(null);
-          }
+          acceptServerState(next);
         } catch (err) {
           setKeyboardError(err instanceof Error ? err.message : String(err));
-          slot.optimisticUntil = 0;
-          setDraftColor(null);
+        } finally {
+          queue.inFlight = false;
+          const queued = queue.pending;
+          queue.pending = null;
+          if (queued) {
+            void runNext(queued.value, queued.commit);
+          } else {
+            setDraftColor(null);
+          }
         }
       };
 
-      const elapsed = now - slot.lastSentAt;
-      if (commit || elapsed >= COLOR_THROTTLE_MS) {
-        if (slot.timerId !== null) {
-          window.clearTimeout(slot.timerId);
-          slot.timerId = null;
-        }
-        slot.pending = null;
-        void send(clamped);
+      if (queue.inFlight) {
+        queue.pending = {
+          value: clamped,
+          commit: Boolean(queue.pending?.commit) || commit,
+        };
       } else {
-        slot.pending = clamped;
-        if (slot.timerId === null) {
-          const remaining = Math.max(0, COLOR_THROTTLE_MS - elapsed);
-          slot.timerId = window.setTimeout(() => {
-            slot.timerId = null;
-            const queued = slot.pending;
-            slot.pending = null;
-            if (queued) {
-              void send(queued);
-            }
-          }, remaining);
-        }
+        void runNext(clamped, commit);
       }
     },
-    []
+    [acceptServerState]
   );
 
-  const setBrightnessStep = useCallback(async (step: number) => {
-    const clamped = Math.max(0, Math.min(4, Math.round(step)));
-    setDraftStep(clamped);
+  const setBrightnessRaw = useCallback(
+    (raw: number, commit = true) => {
+      const maxB = Math.max(1, maxBrightnessRef.current);
+      const clamped = Math.max(0, Math.min(maxB, Math.round(raw)));
+      setDraftBrightnessRaw(clamped);
+
+      const queue = brightnessQueueRef.current;
+      const runNext = async (target: number, isCommit: boolean) => {
+        queue.inFlight = true;
+        try {
+          const next = await invoke<KeyboardState>("set_keyboard_brightness", {
+            raw: target,
+            commit: isCommit,
+          });
+          acceptServerState(next);
+        } catch (err) {
+          setKeyboardError(err instanceof Error ? err.message : String(err));
+        } finally {
+          queue.inFlight = false;
+          const queued = queue.pending;
+          queue.pending = null;
+          if (queued) {
+            void runNext(queued.value, queued.commit);
+          } else {
+            setDraftBrightnessRaw(null);
+          }
+        }
+      };
+
+      if (queue.inFlight) {
+        queue.pending = {
+          value: clamped,
+          commit: Boolean(queue.pending?.commit) || commit,
+        };
+      } else {
+        void runNext(clamped, commit);
+      }
+    },
+    [acceptServerState]
+  );
+
+  const toggleBacklight = useCallback(async () => {
     try {
-      const next = await invoke<KeyboardState>("set_keyboard_brightness_step", {
-        step: clamped,
-      });
-      setKeyboard(next);
-      setKeyboardError(next.error);
+      const next = await invoke<KeyboardState>("toggle_keyboard_backlight");
+      acceptServerState(next);
     } catch (err) {
       setKeyboardError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setDraftStep(null);
     }
-  }, []);
+  }, [acceptServerState]);
 
-  const setEffect = useCallback(async (effect: KeyboardEffectMode) => {
-    try {
-      const next = await invoke<KeyboardState>("set_keyboard_effect", {
-        effect,
-      });
-      setKeyboard(next);
-      setKeyboardError(next.error);
-    } catch (err) {
-      setKeyboardError(err instanceof Error ? err.message : String(err));
-    }
-  }, []);
+  const setBrightnessStep = useCallback(
+    async (step: number) => {
+      const clampedStep = Math.max(0, Math.min(4, Math.round(step)));
+      const map = [0, 64, 128, 192, 255];
+      setBrightnessRaw(map[clampedStep] ?? 255, true);
+    },
+    [setBrightnessRaw]
+  );
 
-  const setSleepTimer = useCallback(async (enabled: boolean, seconds: number) => {
-    try {
-      const next = await invoke<KeyboardState>("set_keyboard_sleep_timer", {
-        enabled,
-        seconds,
-      });
-      setKeyboard(next);
-      setKeyboardError(next.error);
-    } catch (err) {
-      setKeyboardError(err instanceof Error ? err.message : String(err));
-    }
-  }, []);
+  const setEffect = useCallback(
+    async (effect: KeyboardEffectMode) => {
+      try {
+        const next = await invoke<KeyboardState>("set_keyboard_effect", {
+          effect,
+        });
+        acceptServerState(next);
+      } catch (err) {
+        setKeyboardError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [acceptServerState]
+  );
 
+  const setSleepTimer = useCallback(
+    async (enabled: boolean, seconds: number) => {
+      try {
+        const next = await invoke<KeyboardState>("set_keyboard_sleep_timer", {
+          enabled,
+          seconds,
+        });
+        acceptServerState(next);
+      } catch (err) {
+        setKeyboardError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [acceptServerState]
+  );
+
+  const maxBrightness = Math.max(1, keyboard?.maxBrightness ?? 255);
   const activeColor = draftColor ?? keyboard?.color ?? [255, 0, 0];
-  const activeStep = draftStep ?? keyboard?.brightnessStep ?? 4;
+  const activeBrightnessRaw =
+    draftBrightnessRaw ?? (keyboard?.idleDimmed ? 0 : (keyboard?.brightnessRaw ?? 0));
+  const activeBrightnessTarget =
+    draftBrightnessRaw ?? keyboard?.brightnessTarget ?? activeBrightnessRaw;
+  const activeStep = keyboard?.brightnessStep ?? 0;
 
   return {
     keyboard,
     keyboardError,
+    monoOffsetMs,
+    draftColor,
+    draftBrightnessRaw,
     activeColor,
     activeColorHex: rgbToHex(activeColor),
+    activeBrightnessRaw,
+    activeBrightnessTarget,
+    maxBrightness,
     activeStep,
     setColor,
+    setBrightnessRaw,
+    toggleBacklight,
     setBrightnessStep,
     setEffect,
     setSleepTimer,

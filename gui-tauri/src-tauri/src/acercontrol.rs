@@ -4,6 +4,7 @@ type FnAcerOpen = unsafe extern "C" fn() -> *mut c_void;
 type FnAcerClose = unsafe extern "C" fn(*mut c_void);
 type FnAcerVersion = unsafe extern "C" fn() -> *const c_char;
 type FnAcerIntMetric = unsafe extern "C" fn(*mut c_void, *mut c_int) -> c_int;
+type FnAcerStrMetric = unsafe extern "C" fn(*mut c_void, *mut c_char, libc::c_uint) -> c_int;
 
 pub struct AcerControlLib {
     lib_handle: *mut c_void,
@@ -14,6 +15,8 @@ pub struct AcerControlLib {
     gpu_fan_rpm_fn: FnAcerIntMetric,
     cpu_temp_fn: FnAcerIntMetric,
     gpu_temp_fn: FnAcerIntMetric,
+    driver_interface_fn: Option<FnAcerStrMetric>,
+    driver_version_fn: Option<FnAcerStrMetric>,
 }
 
 unsafe impl Send for AcerControlLib {}
@@ -67,6 +70,20 @@ impl AcerControlLib {
             Some(unsafe { std::mem::transmute(ver_ptr) })
         };
 
+        let if_ptr = unsafe { libc::dlsym(lib_handle, b"acer_driver_interface\0".as_ptr() as *const c_char) };
+        let driver_interface_fn: Option<FnAcerStrMetric> = if if_ptr.is_null() {
+            None
+        } else {
+            Some(unsafe { std::mem::transmute(if_ptr) })
+        };
+
+        let drv_ver_ptr = unsafe { libc::dlsym(lib_handle, b"acer_driver_version\0".as_ptr() as *const c_char) };
+        let driver_version_fn: Option<FnAcerStrMetric> = if drv_ver_ptr.is_null() {
+            None
+        } else {
+            Some(unsafe { std::mem::transmute(drv_ver_ptr) })
+        };
+
         Ok(Self {
             lib_handle,
             open_fn,
@@ -76,6 +93,8 @@ impl AcerControlLib {
             gpu_fan_rpm_fn,
             cpu_temp_fn,
             gpu_temp_fn,
+            driver_interface_fn,
+            driver_version_fn,
         })
     }
 
@@ -154,6 +173,34 @@ impl AcerContextGuard<'_> {
 
     pub fn gpu_temperature(&self) -> Result<i32, String> {
         self.read_metric(self.lib.gpu_temp_fn, "GPU temperature")
+    }
+
+    pub fn driver_interface(&self) -> Option<String> {
+        let f = self.lib.driver_interface_fn?;
+        let mut buf = [0u8; 64];
+        let ret = unsafe { f(self.ptr, buf.as_mut_ptr() as *mut c_char, buf.len() as libc::c_uint) };
+        if ret < 0 {
+            return None;
+        }
+        let s = unsafe { CStr::from_ptr(buf.as_ptr() as *const c_char) }
+            .to_string_lossy()
+            .trim()
+            .to_string();
+        if s.is_empty() { None } else { Some(s) }
+    }
+
+    pub fn driver_version(&self) -> Option<String> {
+        let f = self.lib.driver_version_fn?;
+        let mut buf = [0u8; 64];
+        let ret = unsafe { f(self.ptr, buf.as_mut_ptr() as *mut c_char, buf.len() as libc::c_uint) };
+        if ret < 0 {
+            return None;
+        }
+        let s = unsafe { CStr::from_ptr(buf.as_ptr() as *const c_char) }
+            .to_string_lossy()
+            .trim()
+            .to_string();
+        if s.is_empty() { None } else { Some(s) }
     }
 }
 

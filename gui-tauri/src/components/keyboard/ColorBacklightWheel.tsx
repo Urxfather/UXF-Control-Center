@@ -11,7 +11,7 @@ export interface WheelSegment {
   rgb: [number, number, number];
 }
 
-// 12-segment spectrum clockwise from top (12 o'clock) matching the reference screenshot
+// 12-segment spectrum clockwise from top (12 o'clock)
 export const WHEEL_SEGMENTS: readonly WheelSegment[] = [
   { label: "Vivid Red", hex: "#ff0000", rgb: [255, 0, 0] },
   { label: "Hot Pink", hex: "#ff007f", rgb: [255, 0, 127] },
@@ -29,7 +29,7 @@ export const WHEEL_SEGMENTS: readonly WheelSegment[] = [
 
 const CX = 165;
 const CY = 165;
-const R_OUTER = 115; // 230px diameter color ring inside 330px SVG
+const R_OUTER = 115;
 const R_INNER = 87;
 const SUNBURST_RAYS = 72;
 
@@ -75,9 +75,6 @@ function rgbHueIndex(rgb: [number, number, number]): number {
 interface ColorBacklightWheelProps {
   color: [number, number, number];
   colorHex: string;
-  brightnessStep: number;
-  breathing: boolean;
-  dimmed: boolean;
   disabled: boolean;
   onSelectColor: (rgb: [number, number, number], commit: boolean) => void;
 }
@@ -85,16 +82,12 @@ interface ColorBacklightWheelProps {
 export function ColorBacklightWheel({
   color,
   colorHex,
-  brightnessStep,
-  breathing,
-  dimmed,
   disabled,
   onSelectColor,
 }: ColorBacklightWheelProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const draggingRef = useRef(false);
 
-  const litLevel = dimmed || brightnessStep <= 0 ? 0 : 0.25 + (brightnessStep / 4) * 0.75;
   const activeIdx = rgbHueIndex(color);
   const activeStartDeg = -90 + activeIdx * 30;
   const activeEndDeg = activeStartDeg + 30;
@@ -116,7 +109,6 @@ export function ColorBacklightWheel({
     if (dist < R_INNER - 6 || dist > R_OUTER + 18) {
       return null;
     }
-    // 0 deg = 12 o'clock clockwise
     const deg = ((Math.atan2(y, x) * 180) / Math.PI + 90 + 360) % 360;
     const idx = Math.floor(deg / 30) % WHEEL_SEGMENTS.length;
     return WHEEL_SEGMENTS[idx] ?? null;
@@ -146,7 +138,7 @@ export function ColorBacklightWheel({
     }
   };
 
-  const handlePointerUp = (event: PointerEvent<SVGSVGElement>) => {
+  const finishDrag = (event: PointerEvent<SVGSVGElement>) => {
     if (disabled || !draggingRef.current) {
       return;
     }
@@ -165,23 +157,15 @@ export function ColorBacklightWheel({
     onSelectColor(hexToRgb(event.target.value), true);
   };
 
-  const rayStroke = brightnessStep > 0 && !dimmed ? colorHex : "#252c39";
-  const rayOpacity = brightnessStep > 0 && !dimmed ? 0.35 + (brightnessStep / 4) * 0.6 : 0.45;
-  const ambientOpacity = brightnessStep > 0 && !dimmed ? 0.08 + (brightnessStep / 4) * 0.18 : 0;
-
   return (
     <div className="relative -my-4 flex h-[300px] w-[300px] items-center justify-center select-none lg:h-[330px] lg:w-[330px]">
-      {/* Ambient dynamic radial sunburst glow behind the wheel */}
+      {/* Ambient dynamic radial sunburst glow driven phase-accurately via CSS variables */}
       <div
         aria-hidden="true"
-        className={`pointer-events-none absolute inset-[-12px] rounded-full transition-opacity duration-300 ${
-          breathing && litLevel > 0 ? "uxf-kbd-breathing-layer" : ""
-        }`}
+        className="pointer-events-none absolute inset-[-12px] rounded-full"
         style={{
-          opacity: litLevel > 0 ? 1 : 0,
-          background: `radial-gradient(circle, rgba(${color[0]}, ${color[1]}, ${color[2]}, ${ambientOpacity.toFixed(
-            3
-          )}) 0%, rgba(6, 9, 14, 0) 65%)`,
+          opacity: "var(--uxf-wheel-ambient-op, 0)",
+          background: "var(--uxf-wheel-bg, none)",
         }}
       />
 
@@ -190,7 +174,8 @@ export function ColorBacklightWheel({
         viewBox="0 0 330 330"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
+        onPointerUp={finishDrag}
+        onPointerCancel={finishDrag}
         aria-label="Color Backlight wheel"
         className={`relative z-10 h-full w-full ${
           disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
@@ -213,11 +198,10 @@ export function ColorBacklightWheel({
           </mask>
         </defs>
 
-        {/* Outer radial dotted sunburst rays dynamically tinted to selectedColor */}
+        {/* Outer radial dotted sunburst rays */}
         <g
           mask="url(#uxf-sunburst-mask)"
-          className={breathing && litLevel > 0 ? "uxf-kbd-breathing-layer" : ""}
-          style={{ opacity: rayOpacity }}
+          style={{ opacity: "var(--uxf-ray-op, 0.45)" }}
         >
           {Array.from({ length: SUNBURST_RAYS }, (_, idx) => {
             const angle = (idx / SUNBURST_RAYS) * 360;
@@ -230,7 +214,7 @@ export function ColorBacklightWheel({
                 y1={y1.toFixed(2)}
                 x2={x2.toFixed(2)}
                 y2={y2.toFixed(2)}
-                stroke={rayStroke}
+                stroke="var(--uxf-ray-color, #252c39)"
                 strokeWidth="1.45"
                 strokeLinecap="round"
                 strokeDasharray="1.5 4.2"

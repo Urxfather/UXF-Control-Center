@@ -9,20 +9,24 @@ import { UpdateNotificationModal } from "./components/UpdateNotificationModal";
 import { ViewPlaceholder } from "./components/ViewPlaceholder";
 import { KeyboardPage } from "./components/keyboard/KeyboardPage";
 import { SystemDashboard } from "./components/system/SystemDashboard";
+import { SystemCenterPage } from "./components/system-center/SystemCenterPage";
 import { useUpdateChecker } from "./hooks/useUpdateChecker";
 import {
   DEFAULT_SECTION,
   NAV_SECTIONS,
   type NavSectionId,
+  type SystemCenterTabId,
 } from "./types/navigation";
 
 export function App() {
   const [activeSectionId, setActiveSectionId] =
     useState<NavSectionId>(DEFAULT_SECTION);
+  const [systemCenterTab, setSystemCenterTab] =
+    useState<SystemCenterTabId>("overview");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
-  // Default to RPM release version 2.0.2-3
-  const [appVersion, setAppVersion] = useState("2.0.2-3");
+  // Default to RPM release version 2.0.2-4
+  const [appVersion, setAppVersion] = useState("2.0.2-4");
 
   const { updateInfo, showPopup, dismissPopup } = useUpdateChecker(appVersion);
 
@@ -76,6 +80,20 @@ export function App() {
     };
   }, []);
 
+  // Global keyboard shortcut: Ctrl+I opens / toggles UXF System Center
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "i") {
+        event.preventDefault();
+        setActiveSectionId((prev) =>
+          prev === "system-center" ? "system" : "system-center"
+        );
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   useEffect(() => {
     let unmounted = false;
     const runCaptureSequence = async () => {
@@ -99,62 +117,35 @@ export function App() {
       await sleep(800);
       await notifyStep("dashboard");
 
-      // 2. Keyboard - Static RGB
-      setActiveSectionId("keyboard");
-      await sleep(800);
-      window.dispatchEvent(new CustomEvent("uxf-set-keyboard-effect", { detail: "static" }));
-      window.dispatchEvent(new CustomEvent("uxf-set-keyboard-color", { detail: { r: 0, g: 216, b: 255 } }));
-      await sleep(600);
-      await notifyStep("keyboard-rgb-static");
+      // 2. System Center — Overview
+      setActiveSectionId("system-center");
+      setSystemCenterTab("overview");
+      await sleep(1200);
+      await notifyStep("sc-overview");
 
-      // 3. Keyboard - Rainbow Wave
-      window.dispatchEvent(new CustomEvent("uxf-set-keyboard-effect", { detail: "rainbow" }));
+      // 3. System Center — Health
+      setSystemCenterTab("health");
+      await sleep(1500);
+      await notifyStep("sc-health");
+
+      // 4. System Center — Updates
+      setSystemCenterTab("updates");
+      await sleep(1800);
+      await notifyStep("sc-updates");
+
+      // 5. System Center — System Info
+      setSystemCenterTab("system-info");
+      await sleep(1200);
+      await notifyStep("sc-system-info");
+
+      // 6. System Center — About
+      setSystemCenterTab("about");
       await sleep(1000);
-      await notifyStep("keyboard-rgb-rainbow");
+      await notifyStep("sc-about");
 
-      // 4. Keyboard - Breathing Pulse (stays longer so frames can be captured for GIF)
-      window.dispatchEvent(new CustomEvent("uxf-set-keyboard-effect", { detail: "breathing" }));
-      await sleep(1000);
-      await notifyStep("keyboard-rgb-breathing", 3500);
-
-      // Restore static
-      window.dispatchEvent(new CustomEvent("uxf-set-keyboard-effect", { detail: "static" }));
-      await sleep(400);
-
-      // 5. Flexikey Coming Soon
-      setActiveSectionId("flexikey");
-      await sleep(800);
-      await notifyStep("flexikey-coming-soon");
-
-      // 6. FlexiCharger Coming Soon
-      setActiveSectionId("flexicharger");
-      await sleep(800);
-      await notifyStep("flexicharger-coming-soon");
-
-      // 7. About Modal - About Tab
+      // Return to Dashboard and signal completion
       setActiveSectionId("system");
       await sleep(400);
-      window.dispatchEvent(new CustomEvent("uxf-set-modal-open", { detail: true }));
-      await sleep(400);
-      window.dispatchEvent(new CustomEvent("uxf-set-about-tab", { detail: "about" }));
-      await sleep(800);
-      await notifyStep("about");
-
-      // 8. About Modal - Health Check Tab
-      window.dispatchEvent(new CustomEvent("uxf-set-about-tab", { detail: "health" }));
-      await sleep(2000); // Give health scan time to execute
-      await notifyStep("health-check");
-
-      // 9. About Modal - Updates Tab
-      window.dispatchEvent(new CustomEvent("uxf-set-about-tab", { detail: "updates" }));
-      await sleep(2500); // Give update check time to query GitHub API
-      await notifyStep("update-checker");
-
-      // Close modal
-      window.dispatchEvent(new CustomEvent("uxf-set-modal-open", { detail: false }));
-      await sleep(400);
-
-      // Signal completion
       await notifyStep("DONE");
     };
 
@@ -165,7 +156,11 @@ export function App() {
     };
   }, []);
 
-  const activeSection =
+  const handleSelectSection = (id: NavSectionId) => {
+    setActiveSectionId(id);
+  };
+
+  const activePlaceholderSection =
     NAV_SECTIONS.find((section) => section.id === activeSectionId) ??
     NAV_SECTIONS[0];
 
@@ -182,27 +177,33 @@ export function App() {
       <AppHeader
         sidebarCollapsed={sidebarCollapsed}
         isMaximized={isMaximized}
-        appVersion={appVersion}
         onToggleSidebar={() => setSidebarCollapsed((prev) => !prev)}
       />
 
       <div className="flex min-h-0 flex-1">
         <Sidebar
           items={NAV_SECTIONS}
-          activeId={activeSection.id}
+          activeId={activeSectionId}
           collapsed={sidebarCollapsed}
-          onSelect={setActiveSectionId}
+          onSelect={handleSelectSection}
         />
 
-        <main className="min-w-0 flex-1 overflow-y-auto bg-[#0c0f14] select-none">
-          <div key={activeSection.id} className="uxf-tab-fade h-full">
-            {activeSection.id === "system" ? (
+        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#0c0f14] select-none">
+          <div key={activeSectionId} className="uxf-tab-fade h-full min-w-0 w-full">
+            {activeSectionId === "system" ? (
               <SystemDashboard />
-            ) : activeSection.id === "keyboard" ? (
+            ) : activeSectionId === "keyboard" ? (
               <KeyboardPage />
+            ) : activeSectionId === "system-center" ? (
+              <SystemCenterPage
+                appVersion={appVersion}
+                activeTab={systemCenterTab}
+                onSelectTab={setSystemCenterTab}
+                onBackToDashboard={() => setActiveSectionId("system")}
+              />
             ) : (
               <div className="h-full p-5 sm:p-7">
-                <ViewPlaceholder section={activeSection} />
+                <ViewPlaceholder section={activePlaceholderSection} />
               </div>
             )}
           </div>
